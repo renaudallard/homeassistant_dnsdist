@@ -1,0 +1,33 @@
+{
+  "domain": "dnsdist",
+  "name": "PowerDNS dnsdist",
+  "version": "1.0.0",
+  "documentation": "https://github.com/renaudallard/homeassistant_dnsdist",
+  "issue_tracker": "https://github.com/renaudallard/homeassistant_dnsdist/issues",
+  "after_dependencies": ["http"],
+  "codeowners": ["@renaudallard"],
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "integration_type": "hub",
+  "requirements": [],
+  "loggers": ["custom_components.dnsdist"],
+  "quality_scale": "beta",
+  "homeassistant": "2025.1.0",
+  "supported_brands": ["PowerDNS"],
+  "keywords": [
+    "PowerDNS",
+    "dnsdist",
+    "DNS",
+    "load balancing",
+    "monitoring",
+    "metrics"
+  ],
+  "dependencies": [],
+  "ssdp": [],
+  "zeroconf": [],
+  "bluetooth": [],
+  "usb": [],
+  "mqtt": [],
+  "dhcp": [],
+  "diagnostics": true
+}

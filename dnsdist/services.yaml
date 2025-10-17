@@ -1,0 +1,58 @@
+# ===============================================================
+# PowerDNS dnsdist Integration Services
+# ===============================================================
+
+clear_cache:
+  name: Clear DNS Cache
+  description: >
+    Clear the DNS cache on a dnsdist server or group.
+  fields:
+    target:
+      name: Target
+      description: Name of the dnsdist server or group.
+      required: true
+      example: "elendil"
+      selector:
+        text:
+
+enable_server:
+  name: Enable Backend Server
+  description: >
+    Enable a backend server through the dnsdist API.
+  fields:
+    target:
+      name: Target
+      description: Name of the dnsdist instance (server or group) on which to act.
+      required: true
+      example: "elendil"
+      selector:
+        text:
+    backend:
+      name: Backend Name
+      description: >
+        Name or address of the backend to enable (as shown in dnsdist).
+      required: true
+      example: "192.168.1.10:53"
+      selector:
+        text:
+
+disable_server:
+  name: Disable Backend Server
+  description: >
+    Disable a backend server through the dnsdist API.
+  fields:
+    target:
+      name: Target
+      description: Name of the dnsdist instance (server or group) on which to act.
+      required: true
+      example: "elendil"
+      selector:
+        text:
+    backend:
+      name: Backend Name
+      description: >
+        Name or address of the backend to disable (as shown in dnsdist).
+      required: true
+      example: "192.168.1.10:53"
+      selector:
+        text:
