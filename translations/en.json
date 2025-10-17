@@ -1,0 +1,63 @@
+{
+  "title": "PowerDNS dnsdist Integration",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Choose Configuration Type",
+        "description": "Select whether to add a single dnsdist host or a group.",
+        "data": {
+          "mode": "Configuration Type"
+        }
+      },
+      "add_hub": {
+        "title": "Add dnsdist Host",
+        "description": "Connect to a dnsdist API endpoint.",
+        "data": {
+          "name": "Name",
+          "host": "Host address",
+          "port": "Port",
+          "api_key": "API Key",
+          "use_https": "Use HTTPS",
+          "verify_ssl": "Verify SSL certificate",
+          "update_interval": "Update interval (seconds)"
+        }
+      },
+      "add_group": {
+        "title": "Add dnsdist Group",
+        "description": "Group multiple dnsdist hosts together for aggregated stats.",
+        "data": {
+          "name": "Group name",
+          "members": "Group members",
+          "update_interval": "Update interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to dnsdist API.",
+      "invalid_auth": "Invalid API key or authentication error.",
+      "unknown": "Unexpected error occurred.",
+      "required": "This field is required.",
+      "no_members": "You must select at least one member.",
+      "duplicate": "An entry with this name already exists.",
+      "no_hosts": "You must add at least one dnsdist host before creating a group."
+    },
+    "abort": {
+      "single_instance_allowed": "PowerDNS dnsdist supports only one configuration.",
+      "already_configured": "This dnsdist host is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Edit dnsdist Configuration",
+        "description": "Adjust settings for this dnsdist host or group.",
+        "data": {
+          "name": "Name",
+          "members": "Members (for groups only)",
+          "update_interval": "Update interval (seconds)",
+          "human_readable_uptime": "Show human-readable uptime"
+        }
+      }
+    }
+  }
+}
