@@ -1,0 +1,36 @@
+name: HACS Validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    name: Validate HACS repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install HACS validation tools
+        run: |
+          pip install hacs
+
+      - name: Run HACS validation
+        run: |
+          hacs validate
+
+      - name: Run Home Assistant manifest check
+        run: |
+          pip install homeassistant
+          python -m homeassistant.scripts.check_config --files custom_components/dnsdist
