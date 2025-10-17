@@ -1,0 +1,57 @@
+name: Create GitHub Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "custom_components/dnsdist/manifest.json"
+      - "README.md"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Auto Release on Version Change
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Extract version from manifest.json
+        id: manifest
+        run: |
+          import json
+          with open("custom_components/dnsdist/manifest.json") as f:
+              manifest = json.load(f)
+          version = manifest.get("version", "0.0.0")
+          print(f"::set-output name=version::{version}")
+        shell: python
+
+      - name: Check if tag already exists
+        id: tag_check
+        run: |
+          VERSION=${{ steps.manifest.outputs.version }}
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists. Skipping release."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create release
+        if: steps.tag_check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.manifest.outputs.version }}
+          name: Release v${{ steps.manifest.outputs.version }}
+          body_path: README.md
+          draft: false
+          prerelease: false
