@@ -59,7 +59,7 @@ async def _validate_connection(
 class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle dnsdist configuration flow."""
 
-    VERSION = 3
+    VERSION = 4  # bumped for secure storage
 
     async def async_step_user(self, user_input: dict | None = None):
         """First step: choose to add a host or group."""
@@ -105,19 +105,22 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
 
             if not errors:
-                return self.async_create_entry(
-                    title=name,
-                    data={
-                        CONF_NAME: name,
-                        CONF_HOST: host,
-                        CONF_PORT: port,
-                        CONF_API_KEY: api_key,
-                        CONF_USE_HTTPS: use_https,
-                        CONF_VERIFY_SSL: verify_ssl,
-                        CONF_UPDATE_INTERVAL: update_interval,
-                        "is_group": False,
-                    },
-                )
+                entry_data = {
+                    CONF_NAME: name,
+                    CONF_HOST: host,
+                    CONF_PORT: port,
+                    CONF_USE_HTTPS: use_https,
+                    CONF_VERIFY_SSL: verify_ssl,
+                    CONF_UPDATE_INTERVAL: update_interval,
+                    "is_group": False,
+                }
+
+                # Store API key securely
+                if api_key:
+                    self.add_secret(CONF_API_KEY, api_key)
+
+                _LOGGER.debug("Creating new dnsdist host entry: %s", entry_data)
+                return self.async_create_entry(title=name, data=entry_data)
 
         schema = vol.Schema(
             {
@@ -136,14 +139,13 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
 
     # ------------------------------------------------------------
-    # Add Group (fixed version)
+    # Add Group
     # ------------------------------------------------------------
 
     async def async_step_add_group(self, user_input: dict | None = None):
         """Configure a dnsdist group."""
         errors = {}
 
-        # Gather all configured dnsdist hosts
         all_entries = [
             (e.data.get(CONF_NAME), e.data.get("is_group", False))
             for e in self.hass.config_entries.async_entries(DOMAIN)
@@ -177,20 +179,16 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["name"] = "duplicate"
 
             if not errors:
-                try:
-                    _LOGGER.debug("Creating dnsdist group '%s' with members %s", group_name, members)
-                    return self.async_create_entry(
-                        title=group_name,
-                        data={
-                            CONF_NAME: group_name,
-                            "is_group": True,
-                            "members": members,
-                            CONF_UPDATE_INTERVAL: update_interval,
-                        },
-                    )
-                except Exception as err:
-                    _LOGGER.exception("Failed to create dnsdist group: %s", err)
-                    errors["base"] = "unknown"
+                _LOGGER.debug("Creating dnsdist group '%s' with members %s", group_name, members)
+                return self.async_create_entry(
+                    title=group_name,
+                    data={
+                        CONF_NAME: group_name,
+                        "is_group": True,
+                        "members": members,
+                        CONF_UPDATE_INTERVAL: update_interval,
+                    },
+                )
 
         schema = vol.Schema(
             {
