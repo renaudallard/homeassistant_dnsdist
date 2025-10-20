@@ -68,8 +68,14 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator):
                 d = c.data or {}
                 for k in totals:
                     totals[k] += d.get(k, 0) or 0
-                if isinstance(d.get("cpu"), (int, float)):
-                    cpu_values.append(d["cpu"])
+
+                cpu_val = d.get("cpu")
+                try:
+                    if cpu_val is not None:
+                        cpu_values.append(float(cpu_val))
+                except (ValueError, TypeError):
+                    _LOGGER.debug("[%s] Skipping invalid CPU value from %s: %s", self._name, c._name, cpu_val)
+
                 if isinstance(d.get("uptime"), (int, float)):
                     uptime_values.append(d["uptime"])
                 if d.get("security_status"):
@@ -79,8 +85,8 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator):
             cache_rate = round((totals["cache_hits"] / denom) * 100, 2) if denom > 0 else 0.0
             avg_cpu = round(sum(cpu_values) / len(cpu_values), 2) if cpu_values else 0.0
             max_uptime = max(uptime_values) if uptime_values else 0
+            _LOGGER.debug("[%s] Member CPU values: %s → avg %.2f", self._name, cpu_values, avg_cpu)
 
-            # Proper numeric-based security aggregation
             mapping = {"unknown": 0, "ok": 1, "secure": 1, "warning": 2, "critical": 3}
             reverse_map = {0: "unknown", 1: "ok", 2: "warning", 3: "critical"}
 
@@ -94,7 +100,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator):
                 **totals,
                 "cacheHit": cache_rate,
                 "cpu": avg_cpu,
-                "uptime": max_uptime,
+                "uptime": max_uptime,  # ✅ highest uptime wins
                 "security_status": sec_status,
             }
 

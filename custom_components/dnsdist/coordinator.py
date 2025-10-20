@@ -5,6 +5,7 @@ import logging
 from datetime import timedelta
 import aiohttp
 import async_timeout
+from time import monotonic
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -49,6 +50,9 @@ class DnsdistCoordinator(DataUpdateCoordinator):
         self._use_https = use_https
         self._verify_ssl = verify_ssl
         self._base_url = f"{'https' if use_https else 'http'}://{host}:{port}"
+        # Track CPU deltas
+        self._last_cpu_user_msec = None
+        self._last_update_ts = None
 
     async def _async_update_data(self) -> dict:
         """Fetch and normalize dnsdist stats."""
@@ -62,9 +66,45 @@ class DnsdistCoordinator(DataUpdateCoordinator):
                         if resp.status != 200:
                             raise ConnectionError(f"HTTP {resp.status}")
                         stats = await resp.json()
+                        _LOGGER.debug("[%s] Raw dnsdist stats (first 10): %s", self._name, stats[:10])
                         normalized = self._normalize(stats)
+
+                        # --- Compute CPU % based on cpu-user-msec counter ---
+                        try:
+                            cpu_user_msec = normalized.get("cpu_user_msec")
+                            now = monotonic()
+
+                            if cpu_user_msec is not None:
+                                if self._last_cpu_user_msec is not None and self._last_update_ts is not None:
+                                    delta_cpu = cpu_user_msec - self._last_cpu_user_msec
+                                    delta_time = now - self._last_update_ts
+                                    if delta_time > 0 and delta_cpu >= 0:
+                                        cpu_percent = round(((delta_cpu / 1000.0) / delta_time) * 100, 2)
+                                        normalized["cpu"] = cpu_percent
+                                    else:
+                                        normalized["cpu"] = 0.0
+                                else:
+                                    normalized["cpu"] = 0.0  # first run
+
+                                self._last_cpu_user_msec = cpu_user_msec
+                                self._last_update_ts = now
+                            else:
+                                normalized["cpu"] = 0.0
+
+                            _LOGGER.debug(
+                                "[%s] CPU calculation: user_msec=%s last=%s → %.2f%%",
+                                self._name,
+                                normalized.get("cpu_user_msec"),
+                                self._last_cpu_user_msec,
+                                normalized.get("cpu"),
+                            )
+                        except Exception as err:
+                            _LOGGER.warning("[%s] CPU calculation failed: %s", self._name, err)
+                            normalized["cpu"] = 0.0
+
                         _LOGGER.debug("[%s] Normalized dnsdist stats: %s", self._name, normalized)
                         return normalized
+
         except Exception as err:
             _LOGGER.warning("[%s] Failed to fetch data: %s", self._name, err)
             raise
@@ -81,12 +121,12 @@ class DnsdistCoordinator(DataUpdateCoordinator):
             "cache_misses": 0,
             "cacheHit": 0.0,
             "cpu": 0.0,
+            "cpu_user_msec": None,
             "uptime": 0,
             "security_status": "unknown",
         }
 
         try:
-            # dnsdist returns a list of {name: "key", value: X}
             for item in stats:
                 key = item.get("name")
                 val = item.get("value")
@@ -105,12 +145,11 @@ class DnsdistCoordinator(DataUpdateCoordinator):
                     normalized["cache_hits"] = int(val)
                 elif key == "cache-misses":
                     normalized["cache_misses"] = int(val)
-                elif key == "cpu-usage":
-                    normalized["cpu"] = float(val)
+                elif key == "cpu-user-msec":
+                    normalized["cpu_user_msec"] = int(val)
                 elif key == "uptime":
                     normalized["uptime"] = int(val)
                 elif key == "security-status":
-                    # Convert numeric status to text
                     sec = int(val)
                     if sec == 0:
                         normalized["security_status"] = "unknown"
