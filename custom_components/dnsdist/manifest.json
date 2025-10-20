@@ -14,6 +14,7 @@
   "quality_scale": "beta",
   "homeassistant": "2025.1.0",
   "supported_brands": ["PowerDNS"],
+  "services": ["services.yaml"],
   "keywords": [
     "PowerDNS",
     "dnsdist",

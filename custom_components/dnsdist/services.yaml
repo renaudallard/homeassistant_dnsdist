@@ -1,58 +1,93 @@
-# ===============================================================
-# PowerDNS dnsdist Integration Services
-# ===============================================================
+# ============================================================
+# PowerDNS dnsdist — Service Definitions
+# ============================================================
 
 clear_cache:
-  name: Clear DNS Cache
-  description: >
-    Clear the DNS cache on a dnsdist server or group.
+  name: Clear Cache
+  description: Clears the dnsdist cache on the selected host(s).
   fields:
-    target:
-      name: Target
-      description: Name of the dnsdist server or group.
-      required: true
-      example: "elendil"
+    host:
+      name: Host name
+      description: |
+        Optional: The configured dnsdist host to act on.
+        If omitted, all configured dnsdist hosts will be targeted.
+      example: dnsdist1
+      required: false
       selector:
         text:
 
 enable_server:
   name: Enable Backend Server
-  description: >
-    Enable a backend server through the dnsdist API.
+  description: Enables a backend server in dnsdist.
   fields:
-    target:
-      name: Target
-      description: Name of the dnsdist instance (server or group) on which to act.
+    host:
+      name: Host name
       required: true
-      example: "elendil"
+      example: dnsdist1
       selector:
         text:
     backend:
-      name: Backend Name
-      description: >
-        Name or address of the backend to enable (as shown in dnsdist).
+      name: Backend address
       required: true
-      example: "192.168.1.10:53"
+      example: 10.0.0.5:53
       selector:
         text:
 
 disable_server:
   name: Disable Backend Server
-  description: >
-    Disable a backend server through the dnsdist API.
+  description: Disables a backend server in dnsdist.
   fields:
-    target:
-      name: Target
-      description: Name of the dnsdist instance (server or group) on which to act.
+    host:
+      name: Host name
       required: true
-      example: "elendil"
+      example: dnsdist1
       selector:
         text:
     backend:
-      name: Backend Name
-      description: >
-        Name or address of the backend to disable (as shown in dnsdist).
+      name: Backend address
       required: true
-      example: "192.168.1.10:53"
+      example: 10.0.0.5:53
+      selector:
+        text:
+
+reload_config:
+  name: Reload dnsdist Configuration
+  description: Reloads the configuration of dnsdist on the selected host(s).
+  fields:
+    host:
+      name: Host name
+      required: false
+      example: dnsdist1
+      selector:
+        text:
+
+get_backends:
+  name: Get Backends
+  description: Retrieves the list of backend servers (and their state) from the specified dnsdist host.
+  fields:
+    host:
+      name: Host name
+      description: |
+        Optional: The dnsdist host entry name.
+        If omitted, all configured hosts will be queried.
+      required: false
+      example: dnsdist1
+      selector:
+        text:
+
+runtime_command:
+  name: Run Runtime Command
+  description: Executes a raw dnsdist console command via its REST API.
+  fields:
+    host:
+      name: Host name
+      required: true
+      example: dnsdist1
+      selector:
+        text:
+    command:
+      name: Console command
+      required: true
+      example: showServers()
       selector:
         text:
