@@ -2,7 +2,7 @@
 
 ![HACS Badge](https://img.shields.io/badge/HACS-Custom-blue.svg)
 ![Home Assistant](https://img.shields.io/badge/Requires-2025.1%2B-blue)
-![Version](https://img.shields.io/badge/Version-1.0.1-green)
+![Version](https://img.shields.io/badge/Version-1.0.2-green)
 ![License](https://img.shields.io/github/license/renaudallard/homeassistant_dnsdist)
 
 A fully featured **Home Assistant custom integration** for [PowerDNS dnsdist](https://dnsdist.org) — the intelligent DNS load balancer.
