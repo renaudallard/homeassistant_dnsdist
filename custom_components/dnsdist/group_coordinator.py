@@ -78,7 +78,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator):
             denom = totals["cache_hits"] + totals["cache_misses"]
             cache_rate = round((totals["cache_hits"] / denom) * 100, 2) if denom > 0 else 0.0
             avg_cpu = round(sum(cpu_values) / len(cpu_values), 2) if cpu_values else 0.0
-            avg_uptime = round(sum(uptime_values) / len(uptime_values)) if uptime_values else 0
+            max_uptime = max(uptime_values) if uptime_values else 0
 
             # Proper numeric-based security aggregation
             mapping = {"unknown": 0, "ok": 1, "secure": 1, "warning": 2, "critical": 3}
@@ -94,7 +94,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator):
                 **totals,
                 "cacheHit": cache_rate,
                 "cpu": avg_cpu,
-                "uptime": avg_uptime,
+                "uptime": max_uptime,
                 "security_status": sec_status,
             }
 
