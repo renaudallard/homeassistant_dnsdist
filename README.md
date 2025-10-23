@@ -1,5 +1,5 @@
-202510231305
-# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.0)
+202510231415
+# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.1)
 
 A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
 Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and invoke control services.
@@ -8,7 +8,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
 - **Integration type:** Hub (devices per host & per group)
 - **Domain:** `dnsdist`
 - **License:** MIT
-- **Current version:** **1.1.0**
+- **Current version:** **1.1.1**
 
 ---
 
@@ -25,6 +25,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
   - `cacheHit` (%) and `cpu` (%) → `MEASUREMENT`
   - `uptime` (seconds, `device_class=duration`) → `MEASUREMENT`
   - `security_status` (string with attributes)
+  - **New:** `req_per_hour` (Requests per Hour, last hour) and `req_per_day` (Requests per Day, last 24h) — **rounded to whole units**
 - **HTTPS + SSL verification** options
 - **Encrypted API key storage** (leverages HA’s secret store when available)
 - **Diagnostics** (redacts secrets)
@@ -73,8 +74,12 @@ Each **host** and **group** creates a **Device** with these sensors:
 - `cpu` — `%` (`MEASUREMENT`)
 - `uptime` — seconds (`device_class=duration`, `MEASUREMENT`)  
   - Attribute `human_readable`: `Xd HHh MMm`
+- `req_per_hour` — requests/hour (last hour window), **integer**
+- `req_per_day` — requests/day (from last 24h window), **integer**
 - `security_status` — string  
   - Attributes: `status_code` (0–3), `status_label`
+
+> Sensor names are **metric-only**; HA automatically prefixes the device name (e.g., “elrond Cache Hit Rate”).
 
 ---
 
@@ -165,6 +170,10 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.1.1
+- Added **Requests per Hour** (`req_per_hour`) and **Requests per Day** (`req_per_day`) sensors with integer rounding.
+- Fixed duplicate name prefix in sensor display names by using metric-only labels (HA prefixes device name).
 
 ### 1.1.0
 - HA **2025.10** compatibility affirmed.
