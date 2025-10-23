@@ -1,4 +1,4 @@
-# 202510231345
+# 202510231400
 """Sensors for PowerDNS dnsdist integration."""
 
 from __future__ import annotations
@@ -23,9 +23,10 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up dnsdist sensors for a host or group."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    name = getattr(coordinator, "_name", entry.title)
     sensors: list[DnsdistSensor] = []
 
+    # NOTE: Labels below are metric-only. HA will prefix with device (host/group) name
+    # because _attr_has_entity_name = True on the entity class.
     metric_map: dict[str, tuple[str, Any, str, SensorStateClass | None]] = {
         "queries": ("Total Queries", None, "mdi:dns", SensorStateClass.TOTAL_INCREASING),
         "responses": ("Responses", None, "mdi:send", SensorStateClass.TOTAL_INCREASING),
@@ -37,7 +38,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         "cacheHit": ("Cache Hit Rate", PERCENTAGE, "mdi:gauge", SensorStateClass.MEASUREMENT),
         "cpu": ("CPU Usage", PERCENTAGE, "mdi:cpu-64-bit", SensorStateClass.MEASUREMENT),
         "uptime": ("Uptime", UnitOfTime.SECONDS, "mdi:timer-outline", SensorStateClass.MEASUREMENT),
-        # Rate sensors (rounded to whole units)
+        # Rate sensors (rounded to whole units by coordinators)
         "req_per_hour": ("Requests per Hour (last hour)", "req/h", "mdi:chart-line", SensorStateClass.MEASUREMENT),
         "req_per_day": ("Requests per Day (last 24h)", "req/d", "mdi:chart-areaspline", SensorStateClass.MEASUREMENT),
         "security_status": ("Security Status", None, "mdi:shield-check-outline", None),
@@ -49,7 +50,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 coordinator=coordinator,
                 entry_id=entry.entry_id,
                 key=key,
-                label=f"{name} {label}",
+                label=label,  # IMPORTANT: do NOT prepend device name here
                 unit=unit,
                 icon=icon,
                 state_class=state_class,
@@ -63,6 +64,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class DnsdistSensor(CoordinatorEntity, SensorEntity):
     """Representation of a dnsdist metric sensor (host or group)."""
 
+    # Let HA compose the entity name as "<device name> <entity name>"
     _attr_has_entity_name = True
 
     def __init__(
@@ -80,7 +82,8 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._key = key
         self._is_group = is_group
-        self._attr_name = label
+        self._attr_name = label  # metric-only label
+        # Stable unique_id: entry_id + metric key
         self._attr_unique_id = f"{entry_id}:{key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
@@ -99,9 +102,9 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
         if self._key == "uptime" and isinstance(val, (int, float)):
             return int(val)
 
-        # Round requests/hour and requests/day to integer units
+        # Requests/hour and day are integers already (rounded in coordinators), enforce int
         if self._key in ("req_per_hour", "req_per_day") and isinstance(val, (int, float)):
-            return int(round(float(val)))
+            return int(val)
 
         # Percentages rounded to two decimals
         if self._key in ("cacheHit", "cpu") and isinstance(val, (int, float)):
