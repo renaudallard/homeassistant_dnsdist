@@ -1,4 +1,4 @@
-202510231415
+202510231430
 # PowerDNS **dnsdist** — Home Assistant Integration (v1.1.1)
 
 A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
@@ -78,6 +78,12 @@ Each **host** and **group** creates a **Device** with these sensors:
 - `req_per_day` — requests/day (from last 24h window), **integer**
 - `security_status` — string  
   - Attributes: `status_code` (0–3), `status_label`
+
+**⚠️ Warning about rate sensors (`req_per_hour`, `req_per_day`):**  
+These values are computed from a rolling window of the **monotonic `queries` counter**. They will not be accurate until enough time has elapsed:
+- `req_per_hour` needs **at least 1 hour** of data.
+- `req_per_day` needs **at least 24 hours** of data.
+Before those windows are filled, the values may appear lower than expected.
 
 > Sensor names are **metric-only**; HA automatically prefixes the device name (e.g., “elrond Cache Hit Rate”).
 
@@ -173,6 +179,7 @@ custom_components/dnsdist/
 
 ### 1.1.1
 - Added **Requests per Hour** (`req_per_hour`) and **Requests per Day** (`req_per_day`) sensors with integer rounding.
+- **Warning** documented: rate sensors need **≥1h/24h** of data to reflect steady-state values.
 - Fixed duplicate name prefix in sensor display names by using metric-only labels (HA prefixes device name).
 
 ### 1.1.0
