@@ -1,11 +1,21 @@
+# 202510231130
 """Sensors for PowerDNS dnsdist integration."""
 
 from __future__ import annotations
+
 import logging
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorDeviceClass,
+    SensorStateClass,
+)
 from homeassistant.const import UnitOfTime, PERCENTAGE
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
+from homeassistant.helpers.device_registry import DeviceInfo
+
+from .const import DOMAIN, CONF_IS_GROUP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -13,25 +23,36 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up dnsdist sensors for a host or group."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    name = coordinator._name
-    sensors = []
+    name = getattr(coordinator, "_name", entry.title)
+    sensors: list[DnsdistSensor] = []
 
-    metric_map = {
-        "queries": ("Total Queries", None, "mdi:dns"),
-        "responses": ("Responses", None, "mdi:send"),
-        "drops": ("Dropped Queries", None, "mdi:cancel"),
-        "rule_drop": ("Rule Drops", None, "mdi:shield-off-outline"),
-        "downstream_errors": ("Downstream Send Errors", None, "mdi:arrow-down-thick"),
-        "cache_hits": ("Cache Hits", None, "mdi:database-check"),
-        "cache_misses": ("Cache Misses", None, "mdi:database-remove"),
-        "cacheHit": ("Cache Hit Rate", PERCENTAGE, "mdi:gauge"),
-        "cpu": ("CPU Usage", PERCENTAGE, "mdi:cpu-64-bit"),
-        "uptime": ("Uptime", UnitOfTime.SECONDS, "mdi:timer-outline"),
-        "security_status": ("Security Status", None, "mdi:shield-check-outline"),
+    metric_map: dict[str, tuple[str, Any, str, SensorStateClass | None]] = {
+        "queries": ("Total Queries", None, "mdi:dns", SensorStateClass.TOTAL_INCREASING),
+        "responses": ("Responses", None, "mdi:send", SensorStateClass.TOTAL_INCREASING),
+        "drops": ("Dropped Queries", None, "mdi:cancel", SensorStateClass.TOTAL_INCREASING),
+        "rule_drop": ("Rule Drops", None, "mdi:shield-off-outline", SensorStateClass.TOTAL_INCREASING),
+        "downstream_errors": ("Downstream Send Errors", None, "mdi:arrow-down-thick", SensorStateClass.TOTAL_INCREASING),
+        "cache_hits": ("Cache Hits", None, "mdi:database-check", SensorStateClass.TOTAL_INCREASING),
+        "cache_misses": ("Cache Misses", None, "mdi:database-remove", SensorStateClass.TOTAL_INCREASING),
+        "cacheHit": ("Cache Hit Rate", PERCENTAGE, "mdi:gauge", SensorStateClass.MEASUREMENT),
+        "cpu": ("CPU Usage", PERCENTAGE, "mdi:cpu-64-bit", SensorStateClass.MEASUREMENT),
+        "uptime": ("Uptime", UnitOfTime.SECONDS, "mdi:timer-outline", SensorStateClass.MEASUREMENT),
+        "security_status": ("Security Status", None, "mdi:shield-check-outline", None),
     }
 
-    for key, (label, unit, icon) in metric_map.items():
-        sensors.append(DnsdistSensor(coordinator, key, f"{name} {label}", unit, icon))
+    for key, (label, unit, icon, state_class) in metric_map.items():
+        sensors.append(
+            DnsdistSensor(
+                coordinator=coordinator,
+                entry_id=entry.entry_id,
+                key=key,
+                label=f"{name} {label}",
+                unit=unit,
+                icon=icon,
+                state_class=state_class,
+                is_group=bool(entry.data.get(CONF_IS_GROUP)),
+            )
+        )
 
     async_add_entities(sensors)
 
@@ -39,27 +60,47 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class DnsdistSensor(CoordinatorEntity, SensorEntity):
     """Representation of a dnsdist metric sensor (host or group)."""
 
-    def __init__(self, coordinator, key, label, unit, icon):
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        *,
+        coordinator,
+        entry_id: str,
+        key: str,
+        label: str,
+        unit,
+        icon: str,
+        state_class: SensorStateClass | None,
+        is_group: bool,
+    ) -> None:
         super().__init__(coordinator)
         self._key = key
+        self._is_group = is_group
         self._attr_name = label
-        self._attr_unique_id = f"{coordinator._name}_{key}"
+        # Stable unique_id: entry_id + key
+        self._attr_unique_id = f"{entry_id}:{key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
         self._attr_should_poll = False
+        self._attr_state_class = state_class
 
     @property
     def native_value(self):
         """Return the current value."""
-        val = self.coordinator.data.get(self._key) if self.coordinator.data else None
+        val = None
+        try:
+            val = self.coordinator.data.get(self._key) if self.coordinator.data else None
+        except Exception:
+            return None
 
-        # Keep uptime numeric
+        # Uptime as integer seconds
         if self._key == "uptime" and isinstance(val, (int, float)):
             return int(val)
 
-        # Percentages
+        # Percentages rounded
         if self._key in ("cacheHit", "cpu") and isinstance(val, (int, float)):
-            return round(val, 2)
+            return round(float(val), 2)
 
         # Security status as lowercase string
         if self._key == "security_status" and isinstance(val, str):
@@ -68,35 +109,20 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
         return val
 
     @property
-    def icon(self):
-        """Return a dynamic icon for security status."""
-        if self._key == "security_status":
-            status = str(self.native_value).lower() if self.native_value else "unknown"
-            return {
-                "ok": "mdi:shield-check",
-                "secure": "mdi:shield-check",
-                "warning": "mdi:shield-alert",
-                "critical": "mdi:shield-alert-outline",
-                "unknown": "mdi:shield-off",
-            }.get(status, "mdi:shield-off")
-        return self._attr_icon
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Add human-readable uptime and security labels."""
+        attrs: dict[str, Any] = {}
 
-    @property
-    def extra_state_attributes(self):
-        """Return additional attributes for clarity."""
-        attrs = {}
-        val = self.coordinator.data.get(self._key) if self.coordinator.data else None
+        if self._key == "uptime":
+            val = self.native_value
+            if isinstance(val, (int, float)):
+                days = int(val // 86400)
+                hours = int((val % 86400) // 3600)
+                minutes = int((val % 3600) // 60)
+                attrs["human_readable"] = f"{days}d {hours:02d}h {minutes:02d}m"
 
-        # Human-readable uptime
-        if self._key == "uptime" and isinstance(val, (int, float)):
-            days = int(val // 86400)
-            hours = int((val % 86400) // 3600)
-            minutes = int((val % 3600) // 60)
-            attrs["human_readable"] = f"{days}d {hours:02d}h {minutes:02d}m"
-
-        # Security-status details
         elif self._key == "security_status":
-            status = str(self.native_value).lower()
+            status = str(self.native_value or "").lower()
             attrs["status_code"] = {
                 "unknown": 0,
                 "ok": 1,
@@ -122,18 +148,19 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
         return None
 
     @property
-    def device_info(self):
-        """Return device info for this dnsdist hub or group."""
-        # Detect whether this coordinator represents a group or a host
-        is_group = hasattr(self.coordinator, "_members") or "group" in self.coordinator.name.lower()
+    def device_info(self) -> DeviceInfo:
+        """Create a distinct device per host or group."""
+        name = getattr(self.coordinator, "_name", "dnsdist")
+        is_group = self._is_group
+        identifier = f"group:{name}" if is_group else f"host:{name}"
 
-        info = {
-            "identifiers": {(DOMAIN, self.coordinator._name)},
-            "name": self.coordinator._name,
-            "manufacturer": "PowerDNS",
-            "model": "dnsdist Group" if is_group else "dnsdist Host",
-            "entry_type": "service",
-        }
+        info: DeviceInfo = DeviceInfo(
+            identifiers={(DOMAIN, identifier)},
+            name=name,
+            manufacturer="PowerDNS",
+            model="dnsdist Group" if is_group else "dnsdist Host",
+            entry_type=None,
+        )
 
         # Only include a URL for real hosts (groups have no direct API)
         if not is_group and hasattr(self.coordinator, "_host"):

@@ -1,236 +1,179 @@
-# 🛡️ PowerDNS dnsdist — Home Assistant Integration
+202510231305
+# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.0)
 
-![HACS Badge](https://img.shields.io/badge/HACS-Custom-blue.svg)
-![Home Assistant](https://img.shields.io/badge/Requires-2025.1%2B-blue)
-![Version](https://img.shields.io/badge/Version-1.0.3-green)
-![License](https://img.shields.io/github/license/renaudallard/homeassistant_dnsdist)
+A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
+Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and invoke control services.
 
-A fully featured **Home Assistant custom integration** for [PowerDNS dnsdist](https://dnsdist.org) — the intelligent DNS load balancer.
-
-Monitor one or more dnsdist servers, group them for aggregated metrics, and control them directly from Home Assistant via HTTPS, all configured entirely through the UI.
-
----
-
-## ✨ Features
-
-| Category | Description |
-|-----------|-------------|
-| 🧩 Integration Type | Hub-style (`integration_type: "hub"`) |
-| 🔑 Configuration Flow | 100 % UI-based setup (no YAML) |
-| ⚙️ Options Flow | Edit hosts, groups, and polling intervals from the UI |
-| 👥 Group Aggregation | Combine metrics from multiple hosts |
-| 📊 Sensors | Queries, responses, drops, cache, CPU, uptime, security status |
-| 🔒 HTTPS + SSL | Full TLS + optional certificate verification |
-| 🧰 Diagnostics | “Download diagnostics” directly in the HA UI |
-| 🧾 HACS Integration | Fully HACS-compliant structure |
-| 🚀 CI/CD | Automated validation and release via GitHub Actions |
-| 🌍 Localization | English translations included |
-| 🧑‍💻 Compatibility | Home Assistant 2025.1 +, Python 3.13 + |
+- **Compatibility:** Home Assistant **2025.10+**
+- **Integration type:** Hub (devices per host & per group)
+- **Domain:** `dnsdist`
+- **License:** MIT
+- **Current version:** **1.1.0**
 
 ---
 
-## 📦 Installation
+## Features
 
-### 🔹 HACS (Recommended)
-1. Open **HACS → Integrations → Custom Repositories**
-2. Add repository:  
-   ```
-   https://github.com/renaudallard/homeassistant_dnsdist
-   ```
-   → **Type:** Integration  
-3. Search for **PowerDNS dnsdist** and click **Install**
-4. Restart Home Assistant
-
-### 🔹 Manual
-1. Copy the folder:
-   ```
-   custom_components/dnsdist/
-   ```
-   into your Home Assistant configuration directory:
-   ```
-   config/custom_components/dnsdist/
-   ```
-2. Restart Home Assistant
+- **UI-only setup** (no YAML)
+- **Multiple hosts**, each as its own device
+- **Groups** that aggregate hosts:
+  - **Sum:** queries, responses, drops, rule drops, downstream errors, cache hits/misses
+  - **Avg:** CPU %
+  - **Max:** uptime
+- **Sensors** with long-term statistics:
+  - Monotonic counters → `TOTAL_INCREASING` (no unit)
+  - `cacheHit` (%) and `cpu` (%) → `MEASUREMENT`
+  - `uptime` (seconds, `device_class=duration`) → `MEASUREMENT`
+  - `security_status` (string with attributes)
+- **HTTPS + SSL verification** options
+- **Encrypted API key storage** (leverages HA’s secret store when available)
+- **Diagnostics** (redacts secrets)
+- **Services**: `clear_cache`, `enable_server`, `disable_server`, `reload_config`, `get_backends`, `runtime_command`
+- **Localization**: `strings.json` + `translations/en.json`
 
 ---
 
-## ⚙️ Configuration
+## Installation
 
-1. Go to **Settings → Devices & Services**
-2. Click **“+ Add Integration”**
-3. Search for **PowerDNS dnsdist**
+> Requires Home Assistant **2025.10** or newer.
 
-### Options
+1. Copy the `custom_components/dnsdist/` folder into your HA `config/custom_components/` directory.
+2. Restart Home Assistant.
+3. Go to **Settings → Devices & Services → + Add Integration** and select **PowerDNS dnsdist**.
 
-| Field | Description | Example |
-|--------|--------------|----------|
-| **Name** | Friendly name for this dnsdist instance | `dnsdist1` |
-| **Host address** | IP or hostname of the dnsdist API | `172.20.0.248` |
-| **Port** | API port | `8083` |
-| **API Key** | Optional X-API-Key for authentication | `supersecretapikey` |
-| **Use HTTPS** | Connect over TLS | `true` |
-| **Verify SSL** | Validate certificates | `false` |
-| **Update interval (s)** | Polling frequency | `30` |
-
-Groups can be created once you have at least one host configured.
+**HACS (optional):** If you use HACS, add your repository (if private) or install directly if public. Ensure the folder path is exactly `custom_components/dnsdist`.
 
 ---
 
-## 📊 Sensors
+## Configuration
 
-Each dnsdist host or group provides:
+### Add a Host
+- **Name:** Display name
+- **Host / Port:** API endpoint (default port `8083`)
+- **API Key:** Optional (stored securely when supported)
+- **Use HTTPS / Verify SSL:** TLS options
+- **Update interval (s):** Polling frequency (default `30`)
 
-| Sensor | Description |
-|---------|-------------|
-| `queries` | Total DNS queries handled |
-| `responses` | Responses sent |
-| `drops` | Dropped queries |
-| `rule_drop` | Rule-based drops |
-| `downstream_errors` | Downstream send errors |
-| `cache_hits` / `cache_misses` | Cache efficiency |
-| `cacheHit` | Cache hit rate (%) |
-| `cpu` | CPU usage (%) |
-| `uptime` | Uptime (seconds) |
-| `security_status` | OK / Warning / Critical |
+### Add a Group
+- **Group name**
+- **Members:** Select from existing host names
+- **Update interval (s):** Default `30`
 
-Sensors include readable uptime and security labels as attributes.
+> Groups compute **sum** (counters), **avg** (CPU %), **max** (uptime), and a priority **security_status** (critical > warning > ok > unknown).
 
 ---
 
-## 🧰 Built-In Services
+## Entities
 
-All services are available under **Developer Tools → Actions**  
-(HA 2025+ replaced “Services” with this tab).
+Each **host** and **group** creates a **Device** with these sensors:
 
-| Service | Description |
-|----------|-------------|
-| `dnsdist.clear_cache` | Clear dnsdist cache |
-| `dnsdist.enable_server` | Enable a backend server |
-| `dnsdist.disable_server` | Disable a backend server |
-| `dnsdist.reload_config` | Reload dnsdist configuration |
-| `dnsdist.get_backends` | Retrieve list and state of backends |
-| `dnsdist.runtime_command` | Execute any console command via REST API |
+- `queries`, `responses`, `drops`, `rule_drop`, `downstream_errors`, `cache_hits`, `cache_misses`  
+  - `state_class=TOTAL_INCREASING`, **no unit**
+- `cacheHit` — `%` (`MEASUREMENT`)
+- `cpu` — `%` (`MEASUREMENT`)
+- `uptime` — seconds (`device_class=duration`, `MEASUREMENT`)  
+  - Attribute `human_readable`: `Xd HHh MMm`
+- `security_status` — string  
+  - Attributes: `status_code` (0–3), `status_label`
 
-### Examples
+---
 
-**Clear cache**
-```yaml
+## Options
+
+From the integration options:
+- Change **Name**
+- Adjust **Update interval**
+- For **groups**, add/remove **Members**
+
+---
+
+## Services
+
+All services live in the `dnsdist` domain. The optional `host` targets a specific **host display name**; if omitted, the action applies to **all hosts** (not groups).
+
+### Clear cache
 service: dnsdist.clear_cache
 data:
-  host: dnsdist1
-```
+  host: "amandil"  # optional
 
-**Reload configuration**
-```yaml
+### Enable a backend
+service: dnsdist.enable_server
+data:
+  host: "amandil"
+  backend: "192.168.1.10:53"
+
+### Disable a backend
+service: dnsdist.disable_server
+data:
+  host: "amandil"
+  backend: "192.168.1.10:53"
+
+### Reload configuration
 service: dnsdist.reload_config
 data:
-  host: dnsdist1
-```
+  host: "amandil"  # optional
 
-**Run console command**
-```yaml
+### Get backends (results logged)
+service: dnsdist.get_backends
+data:
+  host: "amandil"  # optional
+
+### Runtime console command
 service: dnsdist.runtime_command
 data:
-  host: dnsdist1
-  command: showServers()
-```
+  host: "amandil"  # optional
+  command: "showServers()"
 
 ---
 
-## 👥 Group Aggregation
+## Diagnostics
 
-Group entries automatically:
-* Sum counters (queries, responses, drops)
-* Average percentages (CPU, uptime)
-* Report the highest security level among members  
-
-Each group appears as its own device in Home Assistant.
+Go to **Settings → Devices & Services → PowerDNS dnsdist → ... → Download diagnostics**.  
+Sensitive fields (e.g., API key) are redacted.
 
 ---
 
-## 🧾 Diagnostics
+## Troubleshooting
 
-From the dnsdist device page:
-* Open menu → **Download Diagnostics**  
-Exports a JSON snapshot of configuration (with API keys redacted) and current stats.
+- **Recorder unit warnings**  
+  Ensure counters are unitless with `TOTAL_INCREASING`. This integration sets that correctly.
+- **Device card opens wrong page**  
+  Devices use unique `DeviceInfo.identifiers` per host/group to avoid collisions.
+- **Group shows “No active members yet” at startup**  
+  Normal until each member host completes its first refresh.
 
 ---
 
-## 🧱 Folder Layout
+## File Map
 
-```
 custom_components/dnsdist/
-│
-├── __init__.py
-├── config_flow.py
-├── coordinator.py
-├── group_coordinator.py
-├── sensor.py
-├── diagnostics.py
-├── const.py
-├── services.yaml
-├── strings.json
-├── translations/en.json
-└── manifest.json
-```
+  __init__.py
+  manifest.json
+  const.py
+  config_flow.py
+  options_flow.py
+  coordinator.py
+  group_coordinator.py
+  sensor.py
+  services.py
+  diagnostics.py
+  strings.json
+  translations/
+    en.json
+  services.yaml
 
 ---
 
-## 🧩 Manifest (excerpt)
+## Changelog
 
-```json
-{
-  "domain": "dnsdist",
-  "name": "PowerDNS dnsdist",
-  "version": "1.0.1",
-  "documentation": "https://github.com/renaudallard/homeassistant_dnsdist",
-  "issue_tracker": "https://github.com/renaudallard/homeassistant_dnsdist/issues",
-  "after_dependencies": ["http"],
-  "config_flow": true,
-  "iot_class": "local_polling",
-  "integration_type": "hub",
-  "services": ["services.yaml"],
-  "quality_scale": "beta",
-  "homeassistant": "2025.1.0",
-  "requirements": [],
-  "codeowners": ["@renaudallard"],
-  "supported_brands": ["PowerDNS"],
-  "diagnostics": true
-}
-```
+### 1.1.0
+- HA **2025.10** compatibility affirmed.
+- Stable entity modeling for LTS/recorder (counters = `TOTAL_INCREASING`; percentages/uptime = `MEASUREMENT`).
+- Robust device identifiers (per host/group) and clean diagnostics.
+- Service schemas aligned with `services.yaml`.
 
 ---
 
-## 🧠 Example Automation
+## License
 
-Notify if any backend is down:
-
-```yaml
-alias: Notify if dnsdist backend is down
-trigger:
-  - platform: time_pattern
-    minutes: "/10"
-action:
-  - service: dnsdist.get_backends
-    data:
-      host: dnsdist1
-  - delay: "00:00:02"
-  - condition: template
-    value_template: >
-      {% set s = states('sensor.dnsdist1_security_status') %}
-      {{ s not in ['ok', 'secure'] }}
-  - service: notify.persistent_notification
-    data:
-      title: "dnsdist Alert"
-      message: "One or more dnsdist backends are down or degraded."
-```
-
----
-
-## 🧾 License
-
-Licensed under the **MIT License**  
-© 2025 [Renaud Allard](https://github.com/renaudallard)
-
-Repository:  
-[https://github.com/renaudallard/homeassistant_dnsdist](https://github.com/renaudallard/homeassistant_dnsdist)
+**MIT** — see `LICENSE`.

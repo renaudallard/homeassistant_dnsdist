@@ -1,11 +1,14 @@
+# 202510231130
 """PowerDNS dnsdist integration for Home Assistant."""
 
 from __future__ import annotations
+
 import logging
 from copy import deepcopy
+from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
 from homeassistant.const import Platform
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
@@ -20,6 +23,9 @@ from .const import (
     CONF_USE_HTTPS,
     CONF_VERIFY_SSL,
     CONF_UPDATE_INTERVAL,
+    CONF_MEMBERS,
+    CONF_IS_GROUP,
+    DEFAULT_UPDATE_INTERVAL,
 )
 from .coordinator import DnsdistCoordinator
 from .group_coordinator import DnsdistGroupCoordinator
@@ -29,21 +35,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 # ============================================================
-# Utility: redact secrets in logs
-# ============================================================
-
-def _redact(data: dict) -> dict:
-    clean = deepcopy(data)
-    if CONF_API_KEY in clean:
-        clean[CONF_API_KEY] = "***secret***"
-    return clean
-
-
-# ============================================================
 # Component setup
 # ============================================================
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Initial setup for the dnsdist integration."""
     hass.data.setdefault(DOMAIN, {})
     return True
@@ -59,38 +54,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN]["_services_registered"] = True
         _LOGGER.info("[dnsdist] Registered control services.")
 
-    data = dict(entry.data)
-    is_group = bool(data.get("is_group", False) or data.get("members"))
-    update_interval = data.get(CONF_UPDATE_INTERVAL, 30)
-
+    data: dict[str, Any] = dict(entry.data)
+    is_group = bool(data.get(CONF_IS_GROUP, False) or data.get(CONF_MEMBERS))
+    update_interval = int(data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
     name = data.get(CONF_NAME) or entry.title
+
     _LOGGER.info(
         "[dnsdist] Setting up %s '%s' (raw=%s)",
         "group" if is_group else "host",
         name,
-        _redact(data),
+        _redact(deepcopy(data)),
     )
 
-    # ------------------------------------------------------------
-    # Create coordinator
-    # ------------------------------------------------------------
     if is_group:
-        members = data.get("members", []) or []
+        members = list(data.get(CONF_MEMBERS, []))
         coordinator = DnsdistGroupCoordinator(
-            hass, name=name, members=members, update_interval=update_interval
+            hass,
+            name=name,
+            members=members,
+            update_interval=update_interval,
         )
     else:
         host = data.get(CONF_HOST)
-        port = data.get(CONF_PORT)
-        use_https = data.get(CONF_USE_HTTPS, False)
-        verify_ssl = data.get(CONF_VERIFY_SSL, True)
-        api_key = None
+        port = int(data.get(CONF_PORT, 8083))
+        use_https = bool(data.get(CONF_USE_HTTPS, False))
+        verify_ssl = bool(data.get(CONF_VERIFY_SSL, True))
 
         # Securely retrieve API key (if stored as secret)
+        api_key: str | None = None
         try:
             api_key = await entry.async_get_secret(CONF_API_KEY)
         except AttributeError:
-            # For HA versions before secure secret API
             api_key = data.get(CONF_API_KEY)
 
         coordinator = DnsdistCoordinator(
@@ -114,20 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Forward platforms
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
-
-    async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
-
-
-# ============================================================
-# Entry lifecycle management
-# ============================================================
-
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Reload a dnsdist entry when options or data change."""
-    await hass.config_entries.async_reload(entry.entry_id)
-    async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -158,7 +139,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Move plaintext API key to HA secret store if possible
     if data.get(CONF_API_KEY):
         try:
-            hass.loop.create_task(entry.async_set_secret(CONF_API_KEY, data.pop(CONF_API_KEY)))
+            # store and erase from data
+            hass.config_entries.async_update_entry(entry, data={**data, CONF_API_KEY: None})
+            entry.add_secret(CONF_API_KEY, data[CONF_API_KEY])
             _LOGGER.info("[dnsdist] Migrated API key for '%s' to secure storage", entry.title)
             changed = True
         except AttributeError:
@@ -173,3 +156,10 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_update_entry(entry, data=data, version=ver)
 
     return True
+
+
+def _redact(d: dict) -> dict:
+    """Redact secrets for logs."""
+    if "api_key" in d:
+        d["api_key"] = "***"
+    return d

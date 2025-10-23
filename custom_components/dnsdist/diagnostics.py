@@ -1,36 +1,36 @@
+# 202510231130
 """Diagnostics support for PowerDNS dnsdist integration."""
 
 from __future__ import annotations
+
 import logging
+from typing import Any
+
 from homeassistant.core import HomeAssistant
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
-from .const import DOMAIN
+
+from .const import DOMAIN, CONF_API_KEY
 
 _LOGGER = logging.getLogger(__name__)
 
 # Fields to remove from exported diagnostics (sensitive)
-TO_REDACT = {"api_key", "X-API-Key"}
+TO_REDACT = {CONF_API_KEY, "X-API-Key"}
 
 
-async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> dict:
-    """Return diagnostics for a single dnsdist config entry."""
+async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
+    """Return diagnostics for a single config entry."""
     data = dict(entry.data)
-    data = async_redact_data(data, TO_REDACT)
-
-    coordinator = hass.data[DOMAIN].get(entry.entry_id)
-    diagnostics: dict = {
-        "config": data,
-        "entry_type": data.get("type", "server"),
+    diagnostics: dict[str, Any] = {
+        "config": async_redact_data(data, TO_REDACT),
+        "entry_type": "group" if data.get("is_group") else "host",
     }
 
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if coordinator is None:
         diagnostics["error"] = "Coordinator not initialized"
         return diagnostics
 
-    # include normalized or aggregated data
     try:
         current_data = coordinator.data or {}
         diagnostics["data"] = current_data
@@ -42,13 +42,13 @@ async def async_get_config_entry_diagnostics(
     return diagnostics
 
 
-async def async_get_system_diagnostics(hass: HomeAssistant) -> dict:
+async def async_get_system_diagnostics(hass: HomeAssistant) -> dict[str, Any]:
     """Return overall dnsdist diagnostics for all entries."""
     all_entries = hass.data.get(DOMAIN, {})
     if not all_entries:
         return {"dnsdist": "No active coordinators"}
 
-    system_info = {}
+    system_info: dict[str, Any] = {}
     for entry_id, coordinator in all_entries.items():
         try:
             name = getattr(coordinator, "_name", entry_id)

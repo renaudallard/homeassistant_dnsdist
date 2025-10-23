@@ -1,92 +1,93 @@
-# ============================================================
-# PowerDNS dnsdist — Service Definitions
-# ============================================================
+# 202510231310
 
 clear_cache:
-  name: Clear Cache
-  description: Clears the dnsdist cache on the selected host(s).
+  name: Clear cache
+  description: Clear the dnsdist cache on a host (or all hosts if 'host' is omitted).
   fields:
     host:
       name: Host name
-      description: |
-        Optional: The configured dnsdist host to act on.
-        If omitted, all configured dnsdist hosts will be targeted.
-      example: dnsdist1
+      description: Optional display name of the dnsdist host to target. If omitted, applies to all hosts.
       required: false
+      example: amandil
       selector:
         text:
 
 enable_server:
-  name: Enable Backend Server
-  description: Enables a backend server in dnsdist.
+  name: Enable backend
+  description: Enable a specific backend on the target host.
   fields:
     host:
       name: Host name
+      description: Display name of the dnsdist host to target.
       required: true
-      example: dnsdist1
+      example: amandil
       selector:
         text:
     backend:
-      name: Backend address
+      name: Backend
+      description: Backend identifier (e.g., host:port) to enable.
       required: true
-      example: 10.0.0.5:53
+      example: 192.168.1.10:53
       selector:
         text:
 
 disable_server:
-  name: Disable Backend Server
-  description: Disables a backend server in dnsdist.
+  name: Disable backend
+  description: Disable a specific backend on the target host.
   fields:
     host:
       name: Host name
+      description: Display name of the dnsdist host to target.
       required: true
-      example: dnsdist1
+      example: amandil
       selector:
         text:
     backend:
-      name: Backend address
+      name: Backend
+      description: Backend identifier (e.g., host:port) to disable.
       required: true
-      example: 10.0.0.5:53
+      example: 192.168.1.10:53
       selector:
         text:
 
 reload_config:
-  name: Reload dnsdist Configuration
-  description: Reloads the configuration of dnsdist on the selected host(s).
+  name: Reload configuration
+  description: Trigger a runtime configuration reload on a host (or all hosts if 'host' is omitted).
   fields:
     host:
       name: Host name
+      description: Optional display name of the dnsdist host to target. If omitted, applies to all hosts.
       required: false
-      example: dnsdist1
+      example: amandil
       selector:
         text:
 
 get_backends:
-  name: Get Backends
-  description: Retrieves the list of backend servers (and their state) from the specified dnsdist host.
+  name: Get backends
+  description: Fetch and log the list of backends/servers from a host (or all hosts if 'host' is omitted).
   fields:
     host:
       name: Host name
-      description: |
-        Optional: The dnsdist host entry name.
-        If omitted, all configured hosts will be queried.
+      description: Optional display name of the dnsdist host to target. If omitted, applies to all hosts.
       required: false
-      example: dnsdist1
+      example: amandil
       selector:
         text:
 
 runtime_command:
-  name: Run Runtime Command
-  description: Executes a raw dnsdist console command via its REST API.
+  name: Runtime command
+  description: Execute a dnsdist console command on a host (or all hosts if 'host' is omitted).
   fields:
     host:
       name: Host name
-      required: true
-      example: dnsdist1
+      description: Optional display name of the dnsdist host to target. If omitted, applies to all hosts.
+      required: false
+      example: amandil
       selector:
         text:
     command:
-      name: Console command
+      name: Command
+      description: The console command to run (e.g., showServers()).
       required: true
       example: showServers()
       selector:
