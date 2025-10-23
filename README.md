@@ -1,14 +1,14 @@
-202510231430
-# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.1)
+202510231700
+# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.2)
 
 A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
-Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and invoke control services.
+Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and use safe REST actions.
 
 - **Compatibility:** Home Assistant **2025.10+**
 - **Integration type:** Hub (devices per host & per group)
 - **Domain:** `dnsdist`
 - **License:** MIT
-- **Current version:** **1.1.1**
+- **Current version:** **1.1.2**
 
 ---
 
@@ -25,12 +25,18 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
   - `cacheHit` (%) and `cpu` (%) → `MEASUREMENT`
   - `uptime` (seconds, `device_class=duration`) → `MEASUREMENT`
   - `security_status` (string with attributes)
-  - **New:** `req_per_hour` (Requests per Hour, last hour) and `req_per_day` (Requests per Day, last 24h) — **rounded to whole units**
+  - `req_per_hour` (Requests per Hour, last hour) — **integer**
+  - `req_per_day` (Requests per Day, last 24h) — **integer**
 - **HTTPS + SSL verification** options
 - **Encrypted API key storage** (leverages HA’s secret store when available)
 - **Diagnostics** (redacts secrets)
-- **Services**: `clear_cache`, `enable_server`, `disable_server`, `reload_config`, `get_backends`, `runtime_command`
-- **Localization**: `strings.json` + `translations/en.json`
+- **REST-only services**: `clear_cache`, `enable_server`, `disable_server`, `get_backends`
+- **Device button**: **Clear Cache** (with confirmation). For groups, applies to all member hosts.
+
+> **Rate sensors need time:**  
+> - `req_per_hour` needs **at least 1 hour** of data to stabilize.  
+> - `req_per_day` needs **at least 24 hours** of data to stabilize.  
+> Before these windows fill, values may appear lower than expected.
 
 ---
 
@@ -38,7 +44,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
 
 > Requires Home Assistant **2025.10** or newer.
 
-1. Copy the `custom_components/dnsdist/` folder into your HA `config/custom_components/` directory.
+1. Copy `custom_components/dnsdist/` into your HA `config/custom_components/` directory.
 2. Restart Home Assistant.
 3. Go to **Settings → Devices & Services → + Add Integration** and select **PowerDNS dnsdist**.
 
@@ -79,13 +85,7 @@ Each **host** and **group** creates a **Device** with these sensors:
 - `security_status` — string  
   - Attributes: `status_code` (0–3), `status_label`
 
-**⚠️ Warning about rate sensors (`req_per_hour`, `req_per_day`):**  
-These values are computed from a rolling window of the **monotonic `queries` counter**. They will not be accurate until enough time has elapsed:
-- `req_per_hour` needs **at least 1 hour** of data.
-- `req_per_day` needs **at least 24 hours** of data.
-Before those windows are filled, the values may appear lower than expected.
-
-> Sensor names are **metric-only**; HA automatically prefixes the device name (e.g., “elrond Cache Hit Rate”).
+> Sensor names are **metric-only**; HA prefixes with the device name (e.g., “elrond Cache Hit Rate”).
 
 ---
 
@@ -98,14 +98,17 @@ From the integration options:
 
 ---
 
-## Services
+## Services (REST-only)
 
 All services live in the `dnsdist` domain. The optional `host` targets a specific **host display name**; if omitted, the action applies to **all hosts** (not groups).
+
+> These services use the official **REST API** only. Console-dependent actions have been removed to ensure consistent behavior with YAML webserver configs.
 
 ### Clear cache
 service: dnsdist.clear_cache
 data:
-  host: "amandil"  # optional
+  host: "amandil"  # optional; if omitted, all hosts
+  pool: ""         # optional; default pool if omitted
 
 ### Enable a backend
 service: dnsdist.enable_server
@@ -119,21 +122,18 @@ data:
   host: "amandil"
   backend: "192.168.1.10:53"
 
-### Reload configuration
-service: dnsdist.reload_config
-data:
-  host: "amandil"  # optional
-
 ### Get backends (results logged)
 service: dnsdist.get_backends
 data:
-  host: "amandil"  # optional
+  host: "amandil"  # optional; if omitted, all hosts
 
-### Runtime console command
-service: dnsdist.runtime_command
-data:
-  host: "amandil"  # optional
-  command: "showServers()"
+---
+
+## Device Buttons
+
+Each **host** and **group** device exposes:
+
+- **Clear Cache** — confirmation required; for groups, runs on all member hosts.
 
 ---
 
@@ -146,12 +146,14 @@ Sensitive fields (e.g., API key) are redacted.
 
 ## Troubleshooting
 
-- **Recorder unit warnings**  
-  Ensure counters are unitless with `TOTAL_INCREASING`. This integration sets that correctly.
-- **Device card opens wrong page**  
-  Devices use unique `DeviceInfo.identifiers` per host/group to avoid collisions.
+- **Counters & Recorder**  
+  Monotonic counters are unitless `TOTAL_INCREASING` — safe for long-term statistics.
+- **Device page linking**  
+  Distinct `DeviceInfo.identifiers` avoid collisions between hosts and groups.
 - **Group shows “No active members yet” at startup**  
   Normal until each member host completes its first refresh.
+- **REST requirements on dnsdist**  
+  Ensure the dnsdist **webserver** is enabled with an **API key** and proper **ACL** to your HA network.
 
 ---
 
@@ -166,6 +168,7 @@ custom_components/dnsdist/
   coordinator.py
   group_coordinator.py
   sensor.py
+  button.py
   services.py
   diagnostics.py
   strings.json
@@ -177,16 +180,20 @@ custom_components/dnsdist/
 
 ## Changelog
 
+### 1.1.2
+- Switch to **REST-only** services: keep `clear_cache`, `enable_server`, `disable_server`, `get_backends`; remove console-dependent services.
+- **Buttons:** only **Clear Cache** remains (confirmation enabled); group button applies to all members.
+- README updated to reflect REST-only behavior and the single button.
+
 ### 1.1.1
-- Added **Requests per Hour** (`req_per_hour`) and **Requests per Day** (`req_per_day`) sensors with integer rounding.
-- **Warning** documented: rate sensors need **≥1h/24h** of data to reflect steady-state values.
-- Fixed duplicate name prefix in sensor display names by using metric-only labels (HA prefixes device name).
+- Added **Requests per Hour** (`req_per_hour`) and **Requests per Day** (`req_per_day`) sensors with **integer rounding**.
+- Fixed duplicate device name in sensor display names by using **metric-only** labels.
 
 ### 1.1.0
 - HA **2025.10** compatibility affirmed.
-- Stable entity modeling for LTS/recorder (counters = `TOTAL_INCREASING`; percentages/uptime = `MEASUREMENT`).
-- Robust device identifiers (per host/group) and clean diagnostics.
-- Service schemas aligned with `services.yaml`.
+- Stable entity modeling for Recorder (counters `TOTAL_INCREASING`; percentages/uptime `MEASUREMENT`).
+- Robust device identifiers and clean diagnostics.
+- HACS/manifest alignment.
 
 ---
 
