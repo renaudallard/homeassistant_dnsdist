@@ -1,13 +1,15 @@
-# 202510231130
+# 202510231345
 """Coordinator for PowerDNS dnsdist hosts."""
 
 from __future__ import annotations
 
 import logging
+import time
+from collections import deque
 from datetime import timedelta
 from asyncio import timeout
 from time import monotonic
-from typing import Any
+from typing import Any, Deque, Tuple
 
 import aiohttp
 
@@ -15,13 +17,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
-    DOMAIN,
-    CONF_HOST,
-    CONF_PORT,
     CONF_API_KEY,
+    CONF_UPDATE_INTERVAL,
     CONF_USE_HTTPS,
     CONF_VERIFY_SSL,
-    CONF_UPDATE_INTERVAL,
+    CONF_HOST,
+    CONF_PORT,
+    ATTR_REQ_PER_DAY,
+    ATTR_REQ_PER_HOUR,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,6 +62,8 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Track CPU deltas
         self._last_cpu_user_msec: int | None = None
         self._last_update_ts: float | None = None
+        # Rolling history of (wallclock_ts, queries_counter) for rate sensors
+        self._history: Deque[Tuple[float, int]] = deque()  # seconds since epoch, queries
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch and normalize dnsdist stats."""
@@ -75,7 +80,8 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             _LOGGER.warning("[%s] Fetch error: %s", self._name, err)
             # Preserve last data to avoid sensor going unavailable
-            return self.data or self._zero_data()
+            data = dict(self.data or self._zero_data())
+            return data
 
         _LOGGER.debug("[%s] Raw dnsdist stats (first 10): %s", self._name, stats[:10] if isinstance(stats, list) else stats)
 
@@ -84,18 +90,55 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # --- Compute CPU % based on cpu-user-msec counter ---
         try:
             cpu_user_msec = normalized.get("cpu_user_msec")
-            now = monotonic()
+            now_mono = monotonic()
             if isinstance(cpu_user_msec, (int, float)):
                 if self._last_cpu_user_msec is not None and self._last_update_ts is not None:
                     delta_cpu = cpu_user_msec - self._last_cpu_user_msec
-                    delta_time = now - self._last_update_ts
+                    delta_time = now_mono - self._last_update_ts
                     if delta_time > 0 and delta_cpu >= 0:
                         cpu_percent = ((delta_cpu / 1000.0) / delta_time) * 100
                         normalized["cpu"] = round(max(0.0, min(cpu_percent, 100.0)), 2)
                 self._last_cpu_user_msec = int(cpu_user_msec)
-                self._last_update_ts = now
+                self._last_update_ts = now_mono
         except Exception as err:
             _LOGGER.debug("[%s] CPU computation failed: %s", self._name, err)
+
+        # --- Compute rolling-window request rates (rounded to unit) ---
+        try:
+            now_ts = time.time()
+            q = int(normalized.get("queries", 0))
+            # Reset history if counter went backwards (service restart)
+            if self._history and q < self._history[-1][1]:
+                self._history.clear()
+            self._history.append((now_ts, q))
+            # Trim to last 24h
+            cutoff_24h = now_ts - 86400
+            while self._history and self._history[0][0] < cutoff_24h:
+                self._history.popleft()
+
+            # Helper to compute normalized rate over window_seconds
+            def rate_over(window_seconds: int) -> float:
+                horizon = now_ts - window_seconds
+                base_ts, base_q = self._history[0]
+                for (ts, qq) in self._history:
+                    if ts >= horizon:
+                        base_ts, base_q = ts, qq
+                        break
+                elapsed = max(1.0, now_ts - base_ts)
+                delta = max(0, q - base_q)
+                return (delta * (window_seconds / elapsed)) if elapsed > 0 else 0.0
+
+            reqph = rate_over(3600)      # requests per hour over last hour window (normalized)
+            reqpd_ph = rate_over(86400)  # per-hour over 24h window
+
+            # Round to whole units
+            normalized[ATTR_REQ_PER_HOUR] = int(round(reqph))
+            normalized[ATTR_REQ_PER_DAY] = int(round(reqpd_ph * 24.0))
+
+            # Keep small debug attributes if useful
+            # normalized["rate_windows"] = {"hour_elapsed_s": int(elapsed1), "day_elapsed_s": int(elapsed2)}
+        except Exception as err:
+            _LOGGER.debug("[%s] Rate computation failed: %s", self._name, err)
 
         return normalized
 
@@ -108,11 +151,14 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "downstream_errors": 0,
             "cache_hits": 0,
             "cache_misses": 0,
-            "cacheHit": 0.0,
+            "cacheHit": 0,
             "cpu": 0.0,
             "cpu_user_msec": 0,
             "uptime": 0,
             "security_status": "unknown",
+            # new rates as integers
+            "req_per_hour": 0,
+            "req_per_day": 0,
         }
 
     def _normalize(self, stats: list[dict[str, Any]] | dict[str, Any]) -> dict[str, Any]:
@@ -120,7 +166,6 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         normalized: dict[str, Any] = self._zero_data()
 
         try:
-            # dnsdist returns a list of {name, type, value}
             items = stats if isinstance(stats, list) else stats.get("statistics", [])
             for item in items:
                 key = item.get("name")
@@ -155,7 +200,7 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     elif sec == 3:
                         normalized["security_status"] = "critical"
 
-            # Compute cache hit %
+            # Compute cache hit % (rounded to 0 decimals to match % as integer? keep 2 decimals if you prefer)
             hits = normalized["cache_hits"]
             misses = normalized["cache_misses"]
             denom = hits + misses

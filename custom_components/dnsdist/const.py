@@ -1,4 +1,4 @@
-# 202510231130
+# 202510231330
 """Constants for the PowerDNS dnsdist integration."""
 
 DOMAIN = "dnsdist"
@@ -23,7 +23,7 @@ CONF_NAME = "name"
 CONF_MEMBERS = "members"
 CONF_IS_GROUP = "is_group"
 
-# Attribute names for diagnostics and sensors
+# Attribute names / normalized stat keys
 ATTR_QUERIES = "queries"
 ATTR_RESPONSES = "responses"
 ATTR_DROPS = "drops"
@@ -35,3 +35,7 @@ ATTR_CPU = "cpu"
 ATTR_UPTIME = "uptime"
 ATTR_DOWNSTREAM_ERRORS = "downstream_errors"
 ATTR_SECURITY_STATUS = "security_status"
+
+# New computed rate metrics
+ATTR_REQ_PER_HOUR = "req_per_hour"  # requests/hour over last hour (normalized)
+ATTR_REQ_PER_DAY = "req_per_day"    # requests/day over last 24h (normalized)

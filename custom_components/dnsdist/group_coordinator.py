@@ -1,18 +1,20 @@
-# 202510231130
+# 202510231345
 """Group coordinator for aggregated PowerDNS dnsdist statistics."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from collections import deque
 from datetime import timedelta
-from typing import Any
+from typing import Any, Deque, Tuple
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import DOMAIN, SIGNAL_DNSDIST_RELOAD
+from .const import DOMAIN, SIGNAL_DNSDIST_RELOAD, ATTR_REQ_PER_HOUR, ATTR_REQ_PER_DAY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +33,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._name = name
         self._members = members or []
         self._last_data: dict[str, Any] = self._zero_data()
+        self._history: Deque[Tuple[float, int]] = deque()  # (ts, aggregated_queries)
         async_dispatcher_connect(hass, SIGNAL_DNSDIST_RELOAD, self._handle_reload_signal)
         _LOGGER.info("Initialized dnsdist group '%s' with members: %s", name, ", ".join(self._members))
 
@@ -95,7 +98,6 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             avg_cpu = round(sum(cpu_values) / len(cpu_values), 2) if cpu_values else 0.0
             max_uptime = max(uptime_values) if uptime_values else 0
 
-            # Majority/priority for security status: critical > warning > ok > unknown
             priority = {"critical": 3, "warning": 2, "ok": 1, "secure": 1, "unknown": 0}
             sec_values.sort(key=lambda s: priority.get(s, 0), reverse=True)
             sec_status = sec_values[0] if sec_values else "unknown"
@@ -111,6 +113,36 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "uptime": max_uptime,
                 "security_status": sec_status,
             }
+
+            # --- Rolling-window request rates for the group (rounded to unit) ---
+            try:
+                now_ts = time.time()
+                q_total = int(aggregated["queries"])
+                if self._history and q_total < self._history[-1][1]:
+                    self._history.clear()
+                self._history.append((now_ts, q_total))
+                cutoff_24h = now_ts - 86400
+                while self._history and self._history[0][0] < cutoff_24h:
+                    self._history.popleft()
+
+                def rate_over(window_seconds: int) -> float:
+                    horizon = now_ts - window_seconds
+                    base_ts, base_q = self._history[0]
+                    for (ts, qq) in self._history:
+                        if ts >= horizon:
+                            base_ts, base_q = ts, qq
+                            break
+                    elapsed = max(1.0, now_ts - base_ts)
+                    delta = max(0, q_total - base_q)
+                    return (delta * (window_seconds / elapsed)) if elapsed > 0 else 0.0
+
+                reqph = rate_over(3600)
+                reqpd_ph = rate_over(86400)
+
+                aggregated[ATTR_REQ_PER_HOUR] = int(round(reqph))
+                aggregated[ATTR_REQ_PER_DAY] = int(round(reqpd_ph * 24.0))
+            except Exception as err:
+                _LOGGER.debug("[%s] Group rate computation failed: %s", self._name, err)
 
             self._last_data = aggregated
             _LOGGER.debug("[%s] Aggregated stats: %s", self._name, aggregated)
@@ -134,4 +166,6 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "cpu": 0.0,
             "uptime": 0,
             "security_status": "unknown",
+            "req_per_hour": 0,
+            "req_per_day": 0,
         }

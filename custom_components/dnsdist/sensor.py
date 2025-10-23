@@ -1,4 +1,4 @@
-# 202510231130
+# 202510231345
 """Sensors for PowerDNS dnsdist integration."""
 
 from __future__ import annotations
@@ -37,6 +37,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
         "cacheHit": ("Cache Hit Rate", PERCENTAGE, "mdi:gauge", SensorStateClass.MEASUREMENT),
         "cpu": ("CPU Usage", PERCENTAGE, "mdi:cpu-64-bit", SensorStateClass.MEASUREMENT),
         "uptime": ("Uptime", UnitOfTime.SECONDS, "mdi:timer-outline", SensorStateClass.MEASUREMENT),
+        # Rate sensors (rounded to whole units)
+        "req_per_hour": ("Requests per Hour (last hour)", "req/h", "mdi:chart-line", SensorStateClass.MEASUREMENT),
+        "req_per_day": ("Requests per Day (last 24h)", "req/d", "mdi:chart-areaspline", SensorStateClass.MEASUREMENT),
         "security_status": ("Security Status", None, "mdi:shield-check-outline", None),
     }
 
@@ -78,7 +81,6 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
         self._key = key
         self._is_group = is_group
         self._attr_name = label
-        # Stable unique_id: entry_id + key
         self._attr_unique_id = f"{entry_id}:{key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
@@ -94,15 +96,17 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
         except Exception:
             return None
 
-        # Uptime as integer seconds
         if self._key == "uptime" and isinstance(val, (int, float)):
             return int(val)
 
-        # Percentages rounded
+        # Round requests/hour and requests/day to integer units
+        if self._key in ("req_per_hour", "req_per_day") and isinstance(val, (int, float)):
+            return int(round(float(val)))
+
+        # Percentages rounded to two decimals
         if self._key in ("cacheHit", "cpu") and isinstance(val, (int, float)):
             return round(float(val), 2)
 
-        # Security status as lowercase string
         if self._key == "security_status" and isinstance(val, str):
             return val.lower()
 
@@ -110,7 +114,7 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Add human-readable uptime and security labels."""
+        """Add helpful attributes for uptime and security."""
         attrs: dict[str, Any] = {}
 
         if self._key == "uptime":
@@ -162,7 +166,6 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
             entry_type=None,
         )
 
-        # Only include a URL for real hosts (groups have no direct API)
         if not is_group and hasattr(self.coordinator, "_host"):
             proto = "https" if getattr(self.coordinator, "_use_https", False) else "http"
             info["configuration_url"] = f"{proto}://{self.coordinator._host}:{self.coordinator._port}"
