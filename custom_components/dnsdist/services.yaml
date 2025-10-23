@@ -1,14 +1,21 @@
-# 202510231310
+# 202510231625
 
 clear_cache:
   name: Clear cache
-  description: Clear the dnsdist cache on a host (or all hosts if 'host' is omitted).
+  description: Clear the dnsdist packet cache via REST (expunge all entries in the selected pool).
   fields:
     host:
       name: Host name
       description: Optional display name of the dnsdist host to target. If omitted, applies to all hosts.
       required: false
-      example: amandil
+      example: elendil
+      selector:
+        text:
+    pool:
+      name: Pool
+      description: Pool name to clear. Leave empty to target the default pool ("").
+      required: false
+      example: ""
       selector:
         text:
 
@@ -50,18 +57,6 @@ disable_server:
       selector:
         text:
 
-reload_config:
-  name: Reload configuration
-  description: Trigger a runtime configuration reload on a host (or all hosts if 'host' is omitted).
-  fields:
-    host:
-      name: Host name
-      description: Optional display name of the dnsdist host to target. If omitted, applies to all hosts.
-      required: false
-      example: amandil
-      selector:
-        text:
-
 get_backends:
   name: Get backends
   description: Fetch and log the list of backends/servers from a host (or all hosts if 'host' is omitted).
@@ -70,25 +65,6 @@ get_backends:
       name: Host name
       description: Optional display name of the dnsdist host to target. If omitted, applies to all hosts.
       required: false
-      example: amandil
-      selector:
-        text:
-
-runtime_command:
-  name: Runtime command
-  description: Execute a dnsdist console command on a host (or all hosts if 'host' is omitted).
-  fields:
-    host:
-      name: Host name
-      description: Optional display name of the dnsdist host to target. If omitted, applies to all hosts.
-      required: false
-      example: amandil
-      selector:
-        text:
-    command:
-      name: Command
-      description: The console command to run (e.g., showServers()).
-      required: true
-      example: showServers()
+      example: numendil
       selector:
         text:

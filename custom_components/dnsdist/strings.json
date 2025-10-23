@@ -1,4 +1,5 @@
 {
+  "_version": "202510231635",
   "title": "PowerDNS dnsdist",
   "config": {
     "step": {
@@ -59,5 +60,11 @@
       }
     }
   },
-  "_version": "202510231130"
+  "entity": {
+    "button": {
+      "clear_cache": {
+        "name": "Clear Cache"
+      }
+    }
+  }
 }

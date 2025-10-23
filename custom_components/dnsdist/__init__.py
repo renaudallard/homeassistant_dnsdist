@@ -1,4 +1,4 @@
-# 202510231130
+# 202510231445
 """PowerDNS dnsdist integration for Home Assistant."""
 
 from __future__ import annotations
@@ -34,10 +34,6 @@ from .services import register_dnsdist_services
 _LOGGER = logging.getLogger(__name__)
 
 
-# ============================================================
-# Component setup
-# ============================================================
-
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Initial setup for the dnsdist integration."""
     hass.data.setdefault(DOMAIN, {})
@@ -48,7 +44,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a dnsdist host or group entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Register all services once (on first entry load)
     if "_services_registered" not in hass.data[DOMAIN]:
         await register_dnsdist_services(hass)
         hass.data[DOMAIN]["_services_registered"] = True
@@ -80,7 +75,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         use_https = bool(data.get(CONF_USE_HTTPS, False))
         verify_ssl = bool(data.get(CONF_VERIFY_SSL, True))
 
-        # Securely retrieve API key (if stored as secret)
         api_key: str | None = None
         try:
             api_key = await entry.async_get_secret(CONF_API_KEY)
@@ -100,20 +94,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Perform first data refresh
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception as err:
         _LOGGER.warning("[dnsdist] Initial refresh failed for '%s': %s", name, err)
 
-    # Forward platforms
-    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
+    # Forward platforms (now includes BUTTON)
+    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.BUTTON])
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a dnsdist entry."""
-    unloaded = await hass.config_entries.async_unload_platforms(entry, [Platform.SENSOR])
+    unloaded = await hass.config_entries.async_unload_platforms(entry, [Platform.SENSOR, Platform.BUTTON])
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)
@@ -121,34 +114,24 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unloaded
 
 
-# ============================================================
-# Migration to secure storage
-# ============================================================
-
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate old entries to new format with secure secret storage."""
     data = dict(entry.data)
     ver = entry.version or 1
     changed = False
 
-    # Upgrade baseline version
     if ver < 4:
         ver = 4
         changed = True
 
-    # Move plaintext API key to HA secret store if possible
     if data.get(CONF_API_KEY):
         try:
-            # store and erase from data
             hass.config_entries.async_update_entry(entry, data={**data, CONF_API_KEY: None})
             entry.add_secret(CONF_API_KEY, data[CONF_API_KEY])
             _LOGGER.info("[dnsdist] Migrated API key for '%s' to secure storage", entry.title)
             changed = True
         except AttributeError:
-            _LOGGER.warning(
-                "[dnsdist] Secure secret API not available; keeping plaintext API key for '%s'.",
-                entry.title,
-            )
+            _LOGGER.warning("[dnsdist] Secure secret API not available; keeping plaintext API key for '%s'.", entry.title)
         except Exception as err:
             _LOGGER.warning("[dnsdist] Could not migrate API key for '%s': %s", entry.title, err)
 

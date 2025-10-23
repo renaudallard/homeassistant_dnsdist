@@ -1,4 +1,4 @@
-# 202510231330
+# 202510231445
 """Constants for the PowerDNS dnsdist integration."""
 
 DOMAIN = "dnsdist"
@@ -7,7 +7,7 @@ DOMAIN = "dnsdist"
 DEFAULT_UPDATE_INTERVAL = 30
 
 # Platforms used by this integration
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button"]  # <-- added button
 
 # Dispatcher signal names (safe to import everywhere)
 SIGNAL_DNSDIST_RELOAD = f"{DOMAIN}_reload_groups"
