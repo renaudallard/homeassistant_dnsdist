@@ -11,9 +11,8 @@ from asyncio import timeout
 from time import monotonic
 from typing import Any, Deque, Tuple
 
-import aiohttp
-
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
@@ -70,13 +69,14 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         url = f"{self._base_url}/api/v1/servers/localhost/statistics"
         headers = {"X-API-Key": self._api_key} if self._api_key else {}
 
+        session = async_get_clientsession(self.hass)
+
         try:
-            async with aiohttp.ClientSession() as session:
-                async with timeout(10):
-                    async with session.get(url, headers=headers, ssl=self._verify_ssl) as resp:
-                        if resp.status != 200:
-                            raise ConnectionError(f"HTTP {resp.status}")
-                        stats = await resp.json()
+            async with timeout(10):
+                async with session.get(url, headers=headers, ssl=self._verify_ssl) as resp:
+                    if resp.status != 200:
+                        raise ConnectionError(f"HTTP {resp.status}")
+                    stats = await resp.json()
         except Exception as err:
             _LOGGER.warning("[%s] Fetch error: %s", self._name, err)
             # Preserve last data to avoid sensor going unavailable

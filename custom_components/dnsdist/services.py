@@ -6,8 +6,8 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlencode
 
-import aiohttp
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN
 
@@ -36,24 +36,25 @@ async def _call_dnsdist_api(
     if params:
         url = f"{url}?{urlencode(params, doseq=True)}"
 
+    session = async_get_clientsession(coordinator.hass)
+
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.request(
-                method, url, headers=headers, ssl=getattr(coordinator, "_verify_ssl", True), json=json_data
-            ) as resp:
-                text = await resp.text()
-                if resp.status in (200, 204):
-                    _LOGGER.info("[%s] %s %s OK", getattr(coordinator, "_name", "?"), method, endpoint)
-                else:
-                    _LOGGER.warning(
-                        "[%s] dnsdist API %s %s failed: %s %s",
-                        getattr(coordinator, "_name", "?"),
-                        method,
-                        endpoint,
-                        resp.status,
-                        text,
-                    )
-                return resp.status, text
+        async with session.request(
+            method, url, headers=headers, ssl=getattr(coordinator, "_verify_ssl", True), json=json_data
+        ) as resp:
+            text = await resp.text()
+            if resp.status in (200, 204):
+                _LOGGER.info("[%s] %s %s OK", getattr(coordinator, "_name", "?"), method, endpoint)
+            else:
+                _LOGGER.warning(
+                    "[%s] dnsdist API %s %s failed: %s %s",
+                    getattr(coordinator, "_name", "?"),
+                    method,
+                    endpoint,
+                    resp.status,
+                    text,
+                )
+            return resp.status, text
     except Exception as err:
         _LOGGER.error(
             "[%s] dnsdist API call error on %s %s: %s",

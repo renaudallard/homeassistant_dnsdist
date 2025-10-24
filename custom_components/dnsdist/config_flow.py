@@ -6,12 +6,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import aiohttp
+import asyncio
+
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DOMAIN,
@@ -42,9 +44,11 @@ async def _validate_connection(
     headers = {"X-API-Key": api_key} if api_key else {}
     _LOGGER.debug("Testing dnsdist connection for %s:%s", host, port)
 
+    session = async_get_clientsession(hass)
+
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, ssl=verify_ssl, timeout=5) as resp:
+        async with asyncio.timeout(5):
+            async with session.get(url, headers=headers, ssl=verify_ssl) as resp:
                 if resp.status == 200:
                     _LOGGER.debug("dnsdist connection succeeded for %s:%s", host, port)
                     return True
