@@ -35,6 +35,7 @@ ATTR_CPU = "cpu"
 ATTR_UPTIME = "uptime"
 ATTR_DOWNSTREAM_ERRORS = "downstream_errors"
 ATTR_SECURITY_STATUS = "security_status"
+ATTR_FILTERING_RULES = "filtering_rules"
 
 # New computed rate metrics
 ATTR_REQ_PER_HOUR = "req_per_hour"  # requests/hour over last hour (normalized)

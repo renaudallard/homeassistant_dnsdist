@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections import deque
 from datetime import timedelta
@@ -14,7 +15,13 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import DOMAIN, SIGNAL_DNSDIST_RELOAD, ATTR_REQ_PER_HOUR, ATTR_REQ_PER_DAY
+from .const import (
+    DOMAIN,
+    SIGNAL_DNSDIST_RELOAD,
+    ATTR_REQ_PER_HOUR,
+    ATTR_REQ_PER_DAY,
+    ATTR_FILTERING_RULES,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +82,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             cpu_values: list[float] = []
             uptime_values: list[int] = []
             sec_values: list[str] = []
+            aggregated_rules: dict[str, dict[str, Any]] = {}
 
             for c in active_members:
                 d = c.data or {}
@@ -95,6 +103,37 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 sec = str(d.get("security_status", "unknown")).lower()
                 sec_values.append(sec)
 
+                rules = d.get(ATTR_FILTERING_RULES)
+                if isinstance(rules, dict):
+                    source_name = getattr(c, "_name", "dnsdist")
+                    for rule in rules.values():
+                        if not isinstance(rule, dict):
+                            continue
+
+                        base_name = str(rule.get("name") or "Unnamed Rule").strip()
+                        if not base_name:
+                            base_name = "Unnamed Rule"
+
+                        agg_slug = self._slugify_rule_name(base_name)
+                        matches = self._coerce_int(rule.get("matches"))
+
+                        entry = aggregated_rules.setdefault(
+                            agg_slug,
+                            {
+                                "name": base_name,
+                                "matches": 0,
+                                "sources": {},
+                            },
+                        )
+
+                        entry["matches"] += matches
+                        entry_sources = entry.setdefault("sources", {})
+                        entry_sources[source_name] = entry_sources.get(source_name, 0) + matches
+
+                        for key in ("id", "uuid", "action", "rule", "type", "enabled", "bypass"):
+                            if key in rule and key not in entry and rule[key] is not None:
+                                entry[key] = rule[key]
+
             avg_cpu = round(sum(cpu_values) / len(cpu_values), 2) if cpu_values else 0.0
             max_uptime = max(uptime_values) if uptime_values else 0
 
@@ -113,6 +152,11 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "uptime": max_uptime,
                 "security_status": sec_status,
             }
+
+            if aggregated_rules:
+                aggregated[ATTR_FILTERING_RULES] = aggregated_rules
+            elif ATTR_FILTERING_RULES in self._last_data:
+                aggregated[ATTR_FILTERING_RULES] = self._last_data.get(ATTR_FILTERING_RULES, {})
 
             # --- Rolling-window request rates for the group (rounded to unit) ---
             try:
@@ -168,4 +212,31 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "security_status": "unknown",
             "req_per_hour": 0,
             "req_per_day": 0,
+            ATTR_FILTERING_RULES: {},
         }
+
+    def _coerce_int(self, value: Any) -> int:
+        try:
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, (int, float)):
+                return int(value)
+            if isinstance(value, str):
+                return int(float(value))
+        except (TypeError, ValueError):
+            return 0
+        return 0
+
+    def _slugify(self, value: Any) -> str:
+        base = str(value or "").lower()
+        base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+        if not base:
+            base = "group"
+        return base
+
+    def _slugify_rule_name(self, value: Any) -> str:
+        base = str(value or "").lower()
+        base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+        if not base:
+            base = f"rule-{abs(hash(value)) & 0xFFFF:x}"
+        return base

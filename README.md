@@ -1,5 +1,5 @@
 202510231700
-# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.3)
+# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.4)
 
 A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
 Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and use safe REST actions.
@@ -8,7 +8,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
 - **Integration type:** Hub (devices per host & per group)
 - **Domain:** `dnsdist`
 - **License:** MIT
-- **Current version:** **1.1.3**
+- **Current version:** **1.1.4**
 
 ---
 
@@ -20,6 +20,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
   - **Sum:** queries, responses, drops, rule drops, downstream errors, cache hits/misses
   - **Avg:** CPU %
   - **Max:** uptime
+- **Group filtering rule sensors** aggregate per-rule match counts across members and surface idle/active icons automatically
 - **Sensors** with long-term statistics:
   - Monotonic counters → `TOTAL_INCREASING` (no unit)
   - `cacheHit` (%) and `cpu` (%) → `MEASUREMENT`
@@ -84,6 +85,7 @@ Each **host** and **group** creates a **Device** with these sensors:
 - `req_per_day` — requests/day (from last 24h window), **integer**
 - `security_status` — string  
   - Attributes: `status_code` (0–3), `status_label`
+- **Groups only:** `Filter <rule name>` sensors report aggregated match counts per filtering rule with a `sources` attribute breaking down member contributions; icons switch between `mdi:filter-check-outline` at zero matches and `mdi:filter` when active
 
 > Sensor names are **metric-only**; HA prefixes with the device name (e.g., “elrond Cache Hit Rate”).
 

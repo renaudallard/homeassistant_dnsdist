@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections import deque
 from datetime import timedelta
@@ -24,6 +25,7 @@ from .const import (
     CONF_PORT,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
+    ATTR_FILTERING_RULES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,6 +65,8 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_update_ts: float | None = None
         # Rolling history of (wallclock_ts, queries_counter) for rate sensors
         self._history: Deque[Tuple[float, int]] = deque()  # seconds since epoch, queries
+        # Avoid hammering unsupported filtering rules endpoint with 404s
+        self._filtering_rules_supported: bool | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch and normalize dnsdist stats."""
@@ -86,6 +90,18 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug("[%s] Raw dnsdist stats (first 10): %s", self._name, stats[:10] if isinstance(stats, list) else stats)
 
         normalized = self._normalize(stats)
+
+        # Preserve the latest known filtering rules so sensors remain available when
+        # the endpoint temporarily fails or is disabled. ``self.data`` is ``None``
+        # during the first refresh, so guard every lookup carefully.
+        previous_rules: dict[str, Any] | None = None
+        if isinstance(self.data, dict):
+            maybe_rules = self.data.get(ATTR_FILTERING_RULES)
+            if isinstance(maybe_rules, dict):
+                previous_rules = maybe_rules
+
+        if previous_rules is not None and ATTR_FILTERING_RULES not in normalized:
+            normalized[ATTR_FILTERING_RULES] = previous_rules
 
         # --- Compute CPU % based on cpu-user-msec counter ---
         try:
@@ -140,6 +156,13 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             _LOGGER.debug("[%s] Rate computation failed: %s", self._name, err)
 
+        try:
+            rules = await self._async_fetch_filtering_rules(session, headers)
+            if rules is not None:
+                normalized[ATTR_FILTERING_RULES] = rules
+        except Exception as err:
+            _LOGGER.debug("[%s] Filtering rules fetch failed: %s", self._name, err)
+
         return normalized
 
     def _zero_data(self) -> dict[str, Any]:
@@ -159,6 +182,7 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # new rates as integers
             "req_per_hour": 0,
             "req_per_day": 0,
+            ATTR_FILTERING_RULES: {},
         }
 
     def _normalize(self, stats: list[dict[str, Any]] | dict[str, Any]) -> dict[str, Any]:
@@ -210,3 +234,121 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("[%s] Failed to normalize data: %s", self._name, err)
 
         return normalized
+
+    async def _async_fetch_filtering_rules(self, session, headers) -> dict[str, dict[str, Any]] | None:
+        """Fetch filtering rules and normalize them into a mapping."""
+
+        if self._filtering_rules_supported is False:
+            return None
+
+        url = f"{self._base_url}/api/v1/servers/localhost"
+        payload: Any | None = None
+
+        try:
+            async with timeout(10):
+                async with session.get(url, headers=headers, ssl=self._verify_ssl) as resp:
+                    if resp.status == 404:
+                        if self._filtering_rules_supported is not False:
+                            _LOGGER.debug(
+                                "[%s] Filtering rules endpoint not available (404)",
+                                self._name,
+                            )
+                        self._filtering_rules_supported = False
+                        return None
+                    if resp.status != 200:
+                        raise ConnectionError(f"HTTP {resp.status}")
+                    payload = await resp.json()
+        except Exception as err:
+            _LOGGER.debug("[%s] Could not retrieve filtering rules: %s", self._name, err)
+            return None
+
+        if payload is None:
+            return None
+
+        self._filtering_rules_supported = True
+
+        rules_raw: list[dict[str, Any]] = []
+        if isinstance(payload, list):
+            rules_raw = payload
+        elif isinstance(payload, dict):
+            # ``rules`` is the documented list of live filtering rules. Allow a few
+            # variations to support older or vendor-modified responses.
+            candidate_values: tuple[Any, ...] = (
+                payload.get("rules"),
+                payload.get("filteringRules"),
+                payload.get("filtering_rules"),
+            )
+            for candidate in candidate_values:
+                if isinstance(candidate, list):
+                    rules_raw = candidate
+                    break
+                if isinstance(candidate, dict):
+                    for nested_key in ("rules", "filteringRules", "data"):
+                        maybe = candidate.get(nested_key)
+                        if isinstance(maybe, list):
+                            rules_raw = maybe
+                            break
+                    if rules_raw:
+                        break
+
+        rules: dict[str, dict[str, Any]] = {}
+        for item in rules_raw:
+            if not isinstance(item, dict):
+                continue
+            normalized = self._normalize_filtering_rule(item)
+            if normalized is None:
+                continue
+            slug = normalized.pop("slug")
+            rules[slug] = normalized
+
+        return rules
+
+    def _normalize_filtering_rule(self, item: dict[str, Any]) -> dict[str, Any] | None:
+        """Normalize a filtering rule entry."""
+
+        def _coerce_int(value: Any) -> int:
+            try:
+                if isinstance(value, bool):
+                    return int(value)
+                if isinstance(value, (int, float)):
+                    return int(value)
+                if isinstance(value, str):
+                    return int(float(value))
+            except (TypeError, ValueError):
+                return 0
+            return 0
+
+        name = str(item.get("name") or item.get("rule") or item.get("uuid") or item.get("id") or "Unnamed Rule").strip()
+        if not name:
+            name = "Unnamed Rule"
+
+        matches = 0
+        for key in ("matches", "numMatches", "hits", "num_hits", "hitCount", "count"):
+            if key in item:
+                matches = _coerce_int(item.get(key))
+                break
+
+        slug_source = item.get("uuid") or item.get("id") or name
+        slug = self._slugify_rule(slug_source)
+
+        rule = {
+            "slug": slug,
+            "name": name,
+            "matches": matches,
+            "id": item.get("id"),
+            "uuid": item.get("uuid"),
+            "action": item.get("action"),
+            "rule": item.get("rule"),
+            "type": item.get("type"),
+            "enabled": item.get("enabled"),
+            "bypass": item.get("bypass"),
+        }
+
+        return rule
+
+    def _slugify_rule(self, value: Any) -> str:
+        base = str(value or "").lower()
+        base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+        if not base:
+            base = f"rule-{abs(hash(value)) & 0xFFFF:x}"
+        return base

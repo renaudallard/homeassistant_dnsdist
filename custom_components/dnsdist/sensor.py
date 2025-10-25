@@ -1,6 +1,5 @@
 # 202510231400
 """Sensors for PowerDNS dnsdist integration."""
-
 from __future__ import annotations
 
 import logging
@@ -12,18 +11,41 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import UnitOfTime, PERCENTAGE
+from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN, CONF_IS_GROUP
+from .const import DOMAIN, CONF_IS_GROUP, ATTR_FILTERING_RULES
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _build_device_info(coordinator, is_group: bool) -> DeviceInfo:
+    """Build device information shared by sensors."""
+
+    name = getattr(coordinator, "_name", "dnsdist")
+    identifier = f"group:{name}" if is_group else f"host:{name}"
+
+    info: DeviceInfo = DeviceInfo(
+        identifiers={(DOMAIN, identifier)},
+        name=name,
+        manufacturer="PowerDNS",
+        model="dnsdist Group" if is_group else "dnsdist Host",
+        entry_type=None,
+    )
+
+    if not is_group and hasattr(coordinator, "_host"):
+        proto = "https" if getattr(coordinator, "_use_https", False) else "http"
+        info["configuration_url"] = f"{proto}://{coordinator._host}:{coordinator._port}"
+
+    return info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up dnsdist sensors for a host or group."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     sensors: list[DnsdistSensor] = []
+    is_group = bool(entry.data.get(CONF_IS_GROUP))
 
     # NOTE: Labels below are metric-only. HA will prefix with device (host/group) name
     # because _attr_has_entity_name = True on the entity class.
@@ -54,11 +76,46 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 unit=unit,
                 icon=icon,
                 state_class=state_class,
-                is_group=bool(entry.data.get(CONF_IS_GROUP)),
+                is_group=is_group,
             )
         )
 
     async_add_entities(sensors)
+
+    if coordinator and is_group:
+        known_rules: set[str] = set()
+
+        @callback
+        def _async_sync_filtering_rules() -> None:
+            if not coordinator.data:
+                return
+            rules = coordinator.data.get(ATTR_FILTERING_RULES)
+            if not isinstance(rules, dict):
+                return
+
+            new_entities: list[DnsdistFilteringRuleSensor] = []
+            for slug in rules:
+                if slug in known_rules:
+                    continue
+                entity = DnsdistFilteringRuleSensor(
+                    coordinator=coordinator,
+                    entry_id=entry.entry_id,
+                    rule_slug=slug,
+                    is_group=is_group,
+                )
+                known_rules.add(slug)
+                new_entities.append(entity)
+
+            if new_entities:
+                _LOGGER.debug(
+                    "[dnsdist] Adding filtering rule sensors for %s: %s",
+                    getattr(coordinator, "_name", "dnsdist"),
+                    [entity._slug for entity in new_entities],
+                )
+                async_add_entities(new_entities)
+
+        _async_sync_filtering_rules()
+        entry.async_on_unload(coordinator.async_add_listener(_async_sync_filtering_rules))
 
 
 class DnsdistSensor(CoordinatorEntity, SensorEntity):
@@ -157,20 +214,85 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Create a distinct device per host or group."""
-        name = getattr(self.coordinator, "_name", "dnsdist")
-        is_group = self._is_group
-        identifier = f"group:{name}" if is_group else f"host:{name}"
+        return _build_device_info(self.coordinator, self._is_group)
 
-        info: DeviceInfo = DeviceInfo(
-            identifiers={(DOMAIN, identifier)},
-            name=name,
-            manufacturer="PowerDNS",
-            model="dnsdist Group" if is_group else "dnsdist Host",
-            entry_type=None,
-        )
 
-        if not is_group and hasattr(self.coordinator, "_host"):
-            proto = "https" if getattr(self.coordinator, "_use_https", False) else "http"
-            info["configuration_url"] = f"{proto}://{self.coordinator._host}:{self.coordinator._port}"
+class DnsdistFilteringRuleSensor(CoordinatorEntity, SensorEntity):
+    """Sensor tracking matches for a dnsdist filtering rule."""
 
-        return info
+    _attr_has_entity_name = False
+    _attr_should_poll = False
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(
+        self,
+        *,
+        coordinator,
+        entry_id: str,
+        rule_slug: str,
+        is_group: bool,
+    ) -> None:
+        super().__init__(coordinator)
+        self._slug = rule_slug
+        self._is_group = is_group
+        self._attr_unique_id = f"{entry_id}:filtering_rule:{rule_slug}"
+
+    def _rule_data(self) -> dict[str, Any]:
+        data = self.coordinator.data or {}
+        rules = data.get(ATTR_FILTERING_RULES, {}) if isinstance(data, dict) else {}
+        if isinstance(rules, dict):
+            return rules.get(self._slug, {})
+        return {}
+
+    @property
+    def name(self) -> str:
+        host = getattr(self.coordinator, "_name", "dnsdist")
+        rule = self._rule_data()
+        rule_name = str(rule.get("name") or "Unnamed Rule").strip()
+        if not rule_name:
+            rule_name = "Unnamed Rule"
+        return f"{host} Filter {rule_name}".strip()
+
+    @property
+    def native_value(self):
+        rule = self._rule_data()
+        matches = rule.get("matches")
+        try:
+            if isinstance(matches, bool):
+                return int(matches)
+            if isinstance(matches, (int, float)):
+                return int(matches)
+            if isinstance(matches, str):
+                return int(float(matches))
+        except (TypeError, ValueError):
+            return None
+        if matches is None:
+            return 0 if rule else None
+        return matches
+
+    @property
+    def icon(self) -> str | None:
+        """Return a status icon based on match counts."""
+
+        value = self.native_value
+        if value in (0, 0.0):
+            return "mdi:filter-check-outline"
+        if isinstance(value, (int, float)) and value <= 0:
+            return "mdi:filter-check-outline"
+        return "mdi:filter"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        rule = self._rule_data()
+        attrs: dict[str, Any] = {}
+        for key in ("id", "uuid", "action", "rule", "type", "enabled", "bypass"):
+            if key in rule and rule[key] is not None:
+                attrs[key] = rule[key]
+        sources = rule.get("sources")
+        if isinstance(sources, dict) and sources:
+            attrs["sources"] = sources
+        return attrs
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return _build_device_info(self.coordinator, self._is_group)
