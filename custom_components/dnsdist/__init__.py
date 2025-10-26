@@ -27,6 +27,12 @@ from .const import (
     CONF_IS_GROUP,
     DEFAULT_UPDATE_INTERVAL,
 )
+
+# Pre-import the platforms so Home Assistant does not try to import them from within
+# the event loop while forwarding entry setups.  Importing them here during module
+# evaluation avoids the blocking `import_module` warning introduced in HA 2025.10.
+from . import button  # noqa: F401  # pylint: disable=unused-import
+from . import sensor  # noqa: F401  # pylint: disable=unused-import
 from .coordinator import DnsdistCoordinator
 from .group_coordinator import DnsdistGroupCoordinator
 from .services import register_dnsdist_services

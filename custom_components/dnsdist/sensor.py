@@ -10,7 +10,10 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-from homeassistant.const import COUNT, UnitOfTime, PERCENTAGE
+import homeassistant.const as ha_const
+from homeassistant.const import UnitOfTime, PERCENTAGE
+
+COUNT = getattr(ha_const, "COUNT", "count")
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -57,9 +60,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
         "responses": ("Responses", COUNT, "mdi:send", SensorStateClass.TOTAL_INCREASING),
         "drops": ("Dropped Queries", COUNT, "mdi:cancel", SensorStateClass.TOTAL_INCREASING),
         "rule_drop": ("Rule Drops", COUNT, "mdi:shield-off-outline", SensorStateClass.TOTAL_INCREASING),
-        "downstream_errors": ("Downstream Send Errors", COUNT, "mdi:arrow-down-thick", SensorStateClass.TOTAL_INCREASING),
+        "downstream_errors": (
+            "Downstream Send Errors",
+            COUNT,
+            "mdi:arrow-down-thick",
+            SensorStateClass.TOTAL_INCREASING,
+        ),
         "cache_hits": ("Cache Hits", COUNT, "mdi:database-check", SensorStateClass.TOTAL_INCREASING),
-        "cache_misses": ("Cache Misses", COUNT, "mdi:database-remove", SensorStateClass.TOTAL_INCREASING),
+        "cache_misses": (
+            "Cache Misses",
+            COUNT,
+            "mdi:database-remove",
+            SensorStateClass.TOTAL_INCREASING,
+        ),
         "cacheHit": ("Cache Hit Rate", PERCENTAGE, "mdi:gauge", SensorStateClass.MEASUREMENT),
         "cpu": ("CPU Usage", PERCENTAGE, "mdi:cpu-64-bit", SensorStateClass.MEASUREMENT),
         "uptime": ("Uptime", UnitOfTime.SECONDS, "mdi:timer-outline", SensorStateClass.MEASUREMENT),
