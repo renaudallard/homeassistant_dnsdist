@@ -1,5 +1,5 @@
-202510271130
-# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.6)
+202510271200
+# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.7)
 
 A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
 Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and use safe REST actions.
@@ -8,7 +8,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
 - **Integration type:** Hub (devices per host & per group)
 - **Domain:** `dnsdist`
 - **License:** MIT
-- **Current version:** **1.1.6**
+- **Current version:** **1.1.7**
 
 ---
 
@@ -22,7 +22,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
   - **Max:** uptime
 - **Filtering rule sensors** for hosts (opt-in) and groups (default-on) expose per-rule match counts; groups aggregate member totals and surface idle/active icons automatically
 - **Sensors** with long-term statistics:
-  - Monotonic counters → `TOTAL_INCREASING` (no unit)
+  - Monotonic counters → `TOTAL_INCREASING` (`count` unit)
   - `cacheHit` (%) and `cpu` (%) → `MEASUREMENT`
   - `uptime` (seconds, `device_class=duration`) → `MEASUREMENT`
   - `security_status` (string with attributes)
@@ -77,8 +77,8 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
 
 Each **host** and **group** creates a **Device** with these sensors:
 
-- `queries`, `responses`, `drops`, `rule_drop`, `downstream_errors`, `cache_hits`, `cache_misses`  
-  - `state_class=TOTAL_INCREASING`, **no unit**
+- `queries`, `responses`, `drops`, `rule_drop`, `downstream_errors`, `cache_hits`, `cache_misses`
+  - `state_class=TOTAL_INCREASING`, **unit:** `count`
 - `cacheHit` — `%` (`MEASUREMENT`)
 - `cpu` — `%` (`MEASUREMENT`)
 - `uptime` — seconds (`device_class=duration`, `MEASUREMENT`)  
@@ -185,6 +185,9 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.1.7
+- Report dnsdist monotonic counters with Home Assistant's `count` unit to keep Recorder statistics enabled.
 
 ### 1.1.6
 - Added per-entry control over filtering rule sensors: hosts default off, groups default on, and both can be changed later.

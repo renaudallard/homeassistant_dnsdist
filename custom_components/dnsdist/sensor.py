@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTime, PERCENTAGE
+from homeassistant.const import COUNT, UnitOfTime, PERCENTAGE
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -53,13 +53,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
     # NOTE: Labels below are metric-only. HA will prefix with device (host/group) name
     # because _attr_has_entity_name = True on the entity class.
     metric_map: dict[str, tuple[str, Any, str, SensorStateClass | None]] = {
-        "queries": ("Total Queries", None, "mdi:dns", SensorStateClass.TOTAL_INCREASING),
-        "responses": ("Responses", None, "mdi:send", SensorStateClass.TOTAL_INCREASING),
-        "drops": ("Dropped Queries", None, "mdi:cancel", SensorStateClass.TOTAL_INCREASING),
-        "rule_drop": ("Rule Drops", None, "mdi:shield-off-outline", SensorStateClass.TOTAL_INCREASING),
-        "downstream_errors": ("Downstream Send Errors", None, "mdi:arrow-down-thick", SensorStateClass.TOTAL_INCREASING),
-        "cache_hits": ("Cache Hits", None, "mdi:database-check", SensorStateClass.TOTAL_INCREASING),
-        "cache_misses": ("Cache Misses", None, "mdi:database-remove", SensorStateClass.TOTAL_INCREASING),
+        "queries": ("Total Queries", COUNT, "mdi:dns", SensorStateClass.TOTAL_INCREASING),
+        "responses": ("Responses", COUNT, "mdi:send", SensorStateClass.TOTAL_INCREASING),
+        "drops": ("Dropped Queries", COUNT, "mdi:cancel", SensorStateClass.TOTAL_INCREASING),
+        "rule_drop": ("Rule Drops", COUNT, "mdi:shield-off-outline", SensorStateClass.TOTAL_INCREASING),
+        "downstream_errors": ("Downstream Send Errors", COUNT, "mdi:arrow-down-thick", SensorStateClass.TOTAL_INCREASING),
+        "cache_hits": ("Cache Hits", COUNT, "mdi:database-check", SensorStateClass.TOTAL_INCREASING),
+        "cache_misses": ("Cache Misses", COUNT, "mdi:database-remove", SensorStateClass.TOTAL_INCREASING),
         "cacheHit": ("Cache Hit Rate", PERCENTAGE, "mdi:gauge", SensorStateClass.MEASUREMENT),
         "cpu": ("CPU Usage", PERCENTAGE, "mdi:cpu-64-bit", SensorStateClass.MEASUREMENT),
         "uptime": ("Uptime", UnitOfTime.SECONDS, "mdi:timer-outline", SensorStateClass.MEASUREMENT),
@@ -226,6 +226,7 @@ class DnsdistFilteringRuleSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = False
     _attr_should_poll = False
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = COUNT
 
     def __init__(
         self,
