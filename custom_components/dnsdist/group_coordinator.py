@@ -158,7 +158,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             elif ATTR_FILTERING_RULES in self._last_data:
                 aggregated[ATTR_FILTERING_RULES] = self._last_data.get(ATTR_FILTERING_RULES, {})
 
-            # --- Rolling-window request rates for the group (rounded to unit) ---
+            # --- Rolling-window request totals for the group ---
             try:
                 now_ts = time.time()
                 q_total = int(aggregated["queries"])
@@ -169,22 +169,43 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 while self._history and self._history[0][0] < cutoff_24h:
                     self._history.popleft()
 
-                def rate_over(window_seconds: int) -> float:
+                def window_total(window_seconds: int) -> int:
+                    """Return observed requests for the trailing window."""
+
+                    if not self._history:
+                        return 0
+
                     horizon = now_ts - window_seconds
-                    base_ts, base_q = self._history[0]
-                    for (ts, qq) in self._history:
-                        if ts >= horizon:
-                            base_ts, base_q = ts, qq
+                    prev_ts, prev_q = self._history[0]
+                    baseline = float(prev_q)
+
+                    if prev_ts < horizon:
+                        for ts, qq in list(self._history)[1:]:
+                            if ts < horizon:
+                                prev_ts, prev_q = ts, qq
+                                continue
+
+                            if ts == horizon:
+                                baseline = float(qq)
+                            else:
+                                span = ts - prev_ts
+                                if span > 0:
+                                    fraction = (horizon - prev_ts) / span
+                                    fraction = max(0.0, min(1.0, fraction))
+                                    baseline = float(prev_q) + (qq - prev_q) * fraction
+                                else:
+                                    baseline = float(prev_q)
                             break
-                    elapsed = max(1.0, now_ts - base_ts)
-                    delta = max(0, q_total - base_q)
-                    return (delta * (window_seconds / elapsed)) if elapsed > 0 else 0.0
+                        else:
+                            baseline = float(self._history[-1][1])
+                    else:
+                        baseline = float(prev_q)
 
-                reqph = rate_over(3600)
-                reqpd_ph = rate_over(86400)
+                    delta = q_total - int(baseline)
+                    return max(0, delta)
 
-                aggregated[ATTR_REQ_PER_HOUR] = int(round(reqph))
-                aggregated[ATTR_REQ_PER_DAY] = int(round(reqpd_ph * 24.0))
+                aggregated[ATTR_REQ_PER_HOUR] = window_total(3600)
+                aggregated[ATTR_REQ_PER_DAY] = window_total(86400)
             except Exception as err:
                 _LOGGER.debug("[%s] Group rate computation failed: %s", self._name, err)
 

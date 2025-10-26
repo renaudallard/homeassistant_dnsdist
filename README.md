@@ -1,5 +1,5 @@
-202510231700
-# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.4)
+202510271045
+# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.5)
 
 A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
 Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and use safe REST actions.
@@ -8,7 +8,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
 - **Integration type:** Hub (devices per host & per group)
 - **Domain:** `dnsdist`
 - **License:** MIT
-- **Current version:** **1.1.4**
+- **Current version:** **1.1.5**
 
 ---
 
@@ -181,6 +181,12 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.1.5
+- Refined the hourly and daily request sensors to interpolate counters precisely at the window horizon, preventing inflated totals when samples span the boundary.
+
+### 1.1.4
+- Corrected hourly and daily request totals to report the actual rolling-window volume instead of extrapolated estimates.
 
 ### 1.1.3
 - Reuse Home Assistant's shared HTTP session for config validation, data updates, and services to meet 2025.10 requirements.
