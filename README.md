@@ -1,5 +1,5 @@
-202510271045
-# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.5)
+202510271130
+# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.6)
 
 A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
 Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and use safe REST actions.
@@ -8,7 +8,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
 - **Integration type:** Hub (devices per host & per group)
 - **Domain:** `dnsdist`
 - **License:** MIT
-- **Current version:** **1.1.5**
+- **Current version:** **1.1.6**
 
 ---
 
@@ -20,7 +20,7 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
   - **Sum:** queries, responses, drops, rule drops, downstream errors, cache hits/misses
   - **Avg:** CPU %
   - **Max:** uptime
-- **Group filtering rule sensors** aggregate per-rule match counts across members and surface idle/active icons automatically
+- **Filtering rule sensors** for hosts (opt-in) and groups (default-on) expose per-rule match counts; groups aggregate member totals and surface idle/active icons automatically
 - **Sensors** with long-term statistics:
   - Monotonic counters → `TOTAL_INCREASING` (no unit)
   - `cacheHit` (%) and `cpu` (%) → `MEASUREMENT`
@@ -61,11 +61,13 @@ Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnos
 - **API Key:** Optional (stored securely when supported)
 - **Use HTTPS / Verify SSL:** TLS options
 - **Update interval (s):** Polling frequency (default `30`)
+- **Include filtering rule sensors:** Off by default for hosts; enable to create per-rule sensors
 
 ### Add a Group
 - **Group name**
 - **Members:** Select from existing host names
 - **Update interval (s):** Default `30`
+- **Include filtering rule sensors:** On by default for groups; disable to skip aggregated rule sensors
 
 > Groups compute **sum** (counters), **avg** (CPU %), **max** (uptime), and a priority **security_status** (critical > warning > ok > unknown).
 
@@ -85,7 +87,7 @@ Each **host** and **group** creates a **Device** with these sensors:
 - `req_per_day` — requests/day (from last 24h window), **integer**
 - `security_status` — string  
   - Attributes: `status_code` (0–3), `status_label`
-- **Groups only:** `Filter <rule name>` sensors report aggregated match counts per filtering rule with a `sources` attribute breaking down member contributions; icons switch between `mdi:filter-check-outline` at zero matches and `mdi:filter` when active
+- **Filtering rule sensors (optional):** When enabled, each dnsdist filtering rule yields a `Filter <rule name>` sensor. Host entries report per-rule matches directly; groups aggregate member counts and expose a `sources` attribute to break down contributions. Icons switch between `mdi:filter-check-outline` at zero matches and `mdi:filter` when active.
 
 > Sensor names are **metric-only**; HA prefixes with the device name (e.g., “elrond Cache Hit Rate”).
 
@@ -97,6 +99,8 @@ From the integration options:
 - Change **Name**
 - Adjust **Update interval**
 - For **groups**, add/remove **Members**
+- Toggle **Filtering rule sensors** on or off after setup (hosts default off, groups default on)
+- Decide whether to **delete existing filtering rule sensor entities** when switching the toggle off (enabled by default for immediate cleanup)
 
 ---
 
@@ -181,6 +185,10 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.1.6
+- Added per-entry control over filtering rule sensors: hosts default off, groups default on, and both can be changed later.
+- Introduced an option to automatically delete existing filtering rule sensors when the feature is turned off.
 
 ### 1.1.5
 - Refined the hourly and daily request sensors to interpolate counters precisely at the window horizon, preventing inflated totals when samples span the boundary.

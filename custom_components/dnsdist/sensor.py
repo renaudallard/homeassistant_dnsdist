@@ -15,7 +15,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN, CONF_IS_GROUP, ATTR_FILTERING_RULES
+from .const import DOMAIN, CONF_IS_GROUP, CONF_INCLUDE_FILTER_SENSORS, ATTR_FILTERING_RULES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +46,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
     sensors: list[DnsdistSensor] = []
     is_group = bool(entry.data.get(CONF_IS_GROUP))
+    include_filter_sensors = bool(
+        entry.data.get(CONF_INCLUDE_FILTER_SENSORS, bool(is_group))
+    )
 
     # NOTE: Labels below are metric-only. HA will prefix with device (host/group) name
     # because _attr_has_entity_name = True on the entity class.
@@ -82,7 +85,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     async_add_entities(sensors)
 
-    if coordinator and is_group:
+    if coordinator and include_filter_sensors:
         known_rules: set[str] = set()
 
         @callback

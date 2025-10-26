@@ -1,5 +1,5 @@
 {
-  "_version": "202510231635",
+  "_version": "202511040900",
   "title": "PowerDNS dnsdist",
   "config": {
     "step": {
@@ -20,7 +20,8 @@
           "api_key": "API Key",
           "use_https": "Use HTTPS",
           "verify_ssl": "Verify SSL certificate",
-          "update_interval": "Update interval (seconds)"
+          "update_interval": "Update interval (seconds)",
+          "include_filter_sensors": "Create filtering rule sensors"
         }
       },
       "add_group": {
@@ -29,7 +30,8 @@
         "data": {
           "name": "Group name",
           "members": "Group members",
-          "update_interval": "Update interval (seconds)"
+          "update_interval": "Update interval (seconds)",
+          "include_filter_sensors": "Create filtering rule sensors"
         }
       }
     },
@@ -55,7 +57,9 @@
         "data": {
           "name": "Name",
           "members": "Members (for groups only)",
-          "update_interval": "Update interval (seconds)"
+          "update_interval": "Update interval (seconds)",
+          "include_filter_sensors": "Create filtering rule sensors",
+          "remove_filter_sensors_on_disable": "Delete filtering rule sensors when disabling"
         }
       }
     }

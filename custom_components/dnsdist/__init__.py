@@ -101,6 +101,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Forward platforms (now includes BUTTON)
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.BUTTON])
+
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
 
 
@@ -112,6 +114,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)
         _LOGGER.info("Unloaded dnsdist entry '%s'", entry.title)
     return unloaded
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle config entry updates by reloading the entry."""
+
+    _LOGGER.debug("[dnsdist] Reloading entry '%s' after configuration update", entry.title)
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -25,6 +25,7 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     CONF_MEMBERS,
     CONF_IS_GROUP,
+    CONF_INCLUDE_FILTER_SENSORS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_USE_HTTPS, default=False): bool,
                 vol.Optional(CONF_VERIFY_SSL, default=True): bool,
                 vol.Optional(CONF_UPDATE_INTERVAL, default=30): vol.All(int, vol.Range(min=10, max=600)),
+                vol.Optional(CONF_INCLUDE_FILTER_SENSORS, default=False): bool,
             }
         )
 
@@ -100,6 +102,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         use_https = user_input.get(CONF_USE_HTTPS, False)
         verify_ssl = user_input.get(CONF_VERIFY_SSL, True)
         update_interval = user_input.get(CONF_UPDATE_INTERVAL, 30)
+        include_filter_sensors = bool(user_input.get(CONF_INCLUDE_FILTER_SENSORS, False))
 
         valid = await _validate_connection(self.hass, host, port, api_key, use_https, verify_ssl)
         if not valid:
@@ -119,6 +122,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_VERIFY_SSL: verify_ssl,
             CONF_UPDATE_INTERVAL: update_interval,
             CONF_IS_GROUP: False,
+            CONF_INCLUDE_FILTER_SENSORS: include_filter_sensors,
         }
 
         return self.async_create_entry(title=name, data=data)
@@ -137,6 +141,9 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             group_name = user_input[CONF_NAME]
             members = user_input.get(CONF_MEMBERS, [])
             update_interval = user_input.get(CONF_UPDATE_INTERVAL, 30)
+            include_filter_sensors = bool(
+                user_input.get(CONF_INCLUDE_FILTER_SENSORS, True)
+            )
 
             if not members:
                 errors["base"] = "no_members"
@@ -149,6 +156,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_IS_GROUP: True,
                         CONF_MEMBERS: members,
                         CONF_UPDATE_INTERVAL: update_interval,
+                        CONF_INCLUDE_FILTER_SENSORS: include_filter_sensors,
                     },
                 )
 
@@ -157,6 +165,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_NAME): str,
                 vol.Required(CONF_MEMBERS, default=[]): cv.multi_select(sorted(available_hosts)),
                 vol.Optional(CONF_UPDATE_INTERVAL, default=30): vol.All(int, vol.Range(min=10, max=600)),
+                vol.Optional(CONF_INCLUDE_FILTER_SENSORS, default=True): bool,
             }
         )
 

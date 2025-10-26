@@ -22,6 +22,8 @@ CONF_UPDATE_INTERVAL = "update_interval"
 CONF_NAME = "name"
 CONF_MEMBERS = "members"
 CONF_IS_GROUP = "is_group"
+CONF_INCLUDE_FILTER_SENSORS = "include_filter_sensors"
+CONF_REMOVE_DISABLED_FILTER_SENSORS = "remove_filter_sensors_on_disable"
 
 # Attribute names / normalized stat keys
 ATTR_QUERIES = "queries"
