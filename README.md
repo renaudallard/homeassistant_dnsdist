@@ -1,4 +1,3 @@
-202510271200
 # PowerDNS **dnsdist** — Home Assistant Integration (v1.1.7)
 
 A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
