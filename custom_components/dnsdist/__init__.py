@@ -143,8 +143,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if data.get(CONF_API_KEY):
         try:
-            hass.config_entries.async_update_entry(entry, data={**data, CONF_API_KEY: None})
-            entry.add_secret(CONF_API_KEY, data[CONF_API_KEY])
+            api_key = data[CONF_API_KEY]
+            entry.add_secret(CONF_API_KEY, api_key)
+            data[CONF_API_KEY] = None
             _LOGGER.info("[dnsdist] Migrated API key for '%s' to secure storage", entry.title)
             changed = True
         except AttributeError:
