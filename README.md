@@ -1,169 +1,200 @@
-# PowerDNS **dnsdist** — Home Assistant Integration (v1.1.9)
+# PowerDNS **dnsdist** — Home Assistant Integration
 
-A secure, high-performance custom integration for **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.  
-Monitor multiple dnsdist hosts and aggregated groups (sum/avg/max), view diagnostics, and use safe REST actions.
+[![Release](https://img.shields.io/badge/version-1.1.9-blue.svg)](#changelog)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
+[![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-- **Compatibility:** Home Assistant **2025.10+**
-- **Integration type:** Hub (devices per host & per group)
-- **Domain:** `dnsdist`
-- **License:** MIT
-- **Current version:** **1.1.9**
+> A secure, high-performance bridge between **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**. Monitor every proxy, surface aggregated insights, and control dnsdist safely through REST-only actions.
 
 ---
 
-## Features
+## 📘 Table of Contents <a id="table-of-contents"></a>
 
-- **UI-only setup** (no YAML)
-- **Multiple hosts**, each as its own device
-- **Groups** that aggregate hosts:
+1. [At a Glance](#at-a-glance)
+2. [Feature Highlights](#feature-highlights)
+3. [Installation](#installation)
+4. [Configuration](#configuration)
+5. [Entities](#entities)
+6. [Options](#options)
+7. [Services](#services)
+8. [Device Buttons](#device-buttons)
+9. [Diagnostics](#diagnostics)
+10. [Troubleshooting](#troubleshooting)
+11. [File Map](#file-map)
+12. [Changelog](#changelog)
+13. [License](#license)
+
+---
+
+## ⚡ At a Glance <a id="at-a-glance"></a>
+
+| | |
+| --- | --- |
+| **Integration type** | Hub (per-host and per-group devices) |
+| **Domain** | `dnsdist` |
+| **Current version** | **1.1.9** |
+| **Home Assistant** | **2025.10+** |
+| **dnsdist** | **2.x** |
+| **License** | [MIT](LICENSE) |
+
+---
+
+## ✨ Feature Highlights <a id="feature-highlights"></a>
+
+- **UI-only setup** — zero YAML required.
+- **Multiple hosts** — each dnsdist endpoint becomes its own device.
+- **Aggregated groups** with smart rollups:
   - **Sum:** queries, responses, drops, rule drops, downstream errors, cache hits/misses
-  - **Avg:** CPU %
+  - **Average:** CPU %
   - **Max:** uptime
-- **Filtering rule sensors** for hosts (opt-in) and groups (default-on) expose per-rule match counts; groups aggregate member totals and surface idle/active icons automatically
-- **Sensors** with long-term statistics:
-  - Monotonic counters → `TOTAL_INCREASING` (`count` unit)
-  - `cacheHit` (%) and `cpu` (%) → `MEASUREMENT`
-  - `uptime` (seconds, `device_class=duration`) → `MEASUREMENT`
-  - `security_status` (string with attributes)
-  - `req_per_hour` (Requests per Hour, last hour) — **integer**
-  - `req_per_day` (Requests per Day, last 24h) — **integer**
-- **HTTPS + SSL verification** options
-- **Encrypted API key storage** (leverages HA’s secret store when available)
-- **Diagnostics** (redacts secrets)
-- **REST-only services**: `clear_cache`, `enable_server`, `disable_server`, `get_backends`
-- **Device button**: **Clear Cache** (with confirmation). For groups, applies to all member hosts.
+- **Filtering rule sensors** for per-rule match counts (opt-in for hosts, on by default for groups) complete with idle/active icons.
+- **Long-term statistics ready** sensors:
+  - Monotonic counters as `TOTAL_INCREASING` (`count` unit)
+  - `cacheHit` and `cpu` as `%` (`MEASUREMENT`)
+  - `uptime` as seconds (`device_class=duration`, `MEASUREMENT`)
+  - `security_status` with rich attributes
+  - `req_per_hour` / `req_per_day` as integer rolling windows
+- **Secure by default** with HTTPS, SSL verification, and encrypted API key storage (uses HA’s secret store when available).
+- **Diagnostics bundle** that automatically redacts sensitive data.
+- **REST-only services** (`clear_cache`, `enable_server`, `disable_server`, `get_backends`) and a **Clear Cache** device button for both hosts and groups.
 
-> **Rate sensors need time:**  
-> - `req_per_hour` needs **at least 1 hour** of data to stabilize.  
-> - `req_per_day` needs **at least 24 hours** of data to stabilize.  
-> Before these windows fill, values may appear lower than expected.
+> **Rate sensors need runway:** `req_per_hour` stabilizes after the first hour. `req_per_day` needs 24 hours of samples. Early readings may appear lower than expected.
 
 ---
 
-## Installation
+## 🛠 Installation <a id="installation"></a>
 
 > Requires Home Assistant **2025.10** or newer.
 
-1. Copy `custom_components/dnsdist/` into your HA `config/custom_components/` directory.
+1. Copy `custom_components/dnsdist/` into your Home Assistant `config/custom_components/` directory.
 2. Restart Home Assistant.
-3. Go to **Settings → Devices & Services → + Add Integration** and select **PowerDNS dnsdist**.
+3. Navigate to **Settings → Devices & Services → + Add Integration** and pick **PowerDNS dnsdist**.
 
-**HACS (optional):** If you use HACS, add your repository (if private) or install directly if public. Ensure the folder path is exactly `custom_components/dnsdist`.
+**HACS (optional):** Add this repository as a custom source (if private) or install directly if public. Ensure the integration sits in `custom_components/dnsdist`.
 
 ---
 
-## Configuration
+## 🧩 Configuration <a id="configuration"></a>
 
 ### Add a Host
-- **Name:** Display name
-- **Host / Port:** API endpoint (default port `8083`)
-- **API Key:** Optional (stored securely when supported)
-- **Use HTTPS / Verify SSL:** TLS options
+
+- **Name:** Display name for Home Assistant
+- **Host / Port:** dnsdist API endpoint (default port `8083`)
+- **API Key:** Optional; securely stored when supported
+- **Use HTTPS / Verify SSL:** Toggle TLS and certificate validation
 - **Update interval (s):** Polling frequency (default `30`)
-- **Include filtering rule sensors:** Off by default for hosts; enable to create per-rule sensors
+- **Include filtering rule sensors:** Disabled by default; enable to expose per-rule sensors
 
 ### Add a Group
-- **Group name**
-- **Members:** Select from existing host names
-- **Update interval (s):** Default `30`
-- **Include filtering rule sensors:** On by default for groups; disable to skip aggregated rule sensors
 
-> Groups compute **sum** (counters), **avg** (CPU %), **max** (uptime), and a priority **security_status** (critical > warning > ok > unknown).
+- **Group name** — Home Assistant device label
+- **Members** — Choose from existing host names
+- **Update interval (s):** Default `30`
+- **Include filtering rule sensors:** Enabled by default; disable to skip aggregated rule sensors
+
+> Group rollups: **sum** (counters), **avg** (CPU %), **max** (uptime), and priority **security_status** (critical → warning → ok → unknown).
 
 ---
 
-## Entities
+## 📊 Entities <a id="entities"></a>
 
-Each **host** and **group** creates a **Device** with these sensors:
+Each host or group creates a Home Assistant device with these sensors:
 
 - `queries`, `responses`, `drops`, `rule_drop`, `downstream_errors`, `cache_hits`, `cache_misses`
-  - `state_class=TOTAL_INCREASING`, **unit:** `count`
+  - `state_class=TOTAL_INCREASING`, unit `count`
 - `cacheHit` — `%` (`MEASUREMENT`)
 - `cpu` — `%` (`MEASUREMENT`)
-- `uptime` — seconds (`device_class=duration`, `MEASUREMENT`)  
+- `uptime` — seconds (`device_class=duration`, `MEASUREMENT`)
   - Attribute `human_readable`: `Xd HHh MMm`
-- `req_per_hour` — requests/hour (last hour window), **integer**
-- `req_per_day` — requests/day (from last 24h window), **integer**
-- `security_status` — string  
-  - Attributes: `status_code` (0–3), `status_label`
-- **Filtering rule sensors (optional):** When enabled, each dnsdist filtering rule yields a `Filter <rule name>` sensor. Host entries report per-rule matches directly; groups aggregate member counts and expose a `sources` attribute to break down contributions. Icons switch between `mdi:filter-check-outline` at zero matches and `mdi:filter` when active.
+- `req_per_hour` — integer requests/hour (rolling 1-hour window)
+- `req_per_day` — integer requests/day (rolling 24-hour window)
+- `security_status` — string with `status_code` (0–3) and `status_label`
+- **Filtering rule sensors** (`Filter <rule name>`) — per-rule matches for hosts, aggregated counts plus a `sources` attribute for groups. Icons flip between `mdi:filter-check-outline` (idle) and `mdi:filter` (active).
 
-> Sensor names are **metric-only**; HA prefixes with the device name (e.g., “elrond Cache Hit Rate”).
-
----
-
-## Options
-
-From the integration options:
-- Change **Name**
-- Adjust **Update interval**
-- For **groups**, add/remove **Members**
-- Toggle **Filtering rule sensors** on or off after setup (hosts default off, groups default on)
-- Decide whether to **delete existing filtering rule sensor entities** when switching the toggle off (enabled by default for immediate cleanup)
+> Sensor entity names are metric-only. Home Assistant automatically prefixes them with the device name (e.g., “elrond Cache Hit Rate”).
 
 ---
 
-## Services (REST-only)
+## ⚙️ Options <a id="options"></a>
 
-All services live in the `dnsdist` domain. The optional `host` targets a specific **host display name**; if omitted, the action applies to **all hosts** (not groups).
+From the integration options panel you can:
 
-> These services use the official **REST API** only. Console-dependent actions have been removed to ensure consistent behavior with YAML webserver configs.
+- Rename a host or group
+- Tune the **Update interval**
+- For groups, add or remove **Members**
+- Toggle **Filtering rule sensors** at any time (hosts default off, groups default on)
+- Decide whether disabling filtering rule sensors should immediately delete the existing entities (enabled by default)
 
-### Clear cache
+---
+
+## 🔌 Services <a id="services"></a>
+
+All services live under the `dnsdist` domain. Supplying `host` targets a specific display name; omit it to broadcast the action to every host (groups excluded).
+
+> Console-dependent behaviors are gone. Everything here calls the official dnsdist REST API so it works regardless of your YAML webserver configuration.
+
+### `dnsdist.clear_cache`
+
+```yaml
 service: dnsdist.clear_cache
 data:
-  host: "amandil"  # optional; if omitted, all hosts
-  pool: ""         # optional; default pool if omitted
+  host: "amandil"  # optional; runs on all hosts when omitted
+  pool: ""         # optional; defaults to dnsdist's primary pool
+```
 
-### Enable a backend
+### `dnsdist.enable_server`
+
+```yaml
 service: dnsdist.enable_server
 data:
   host: "amandil"
   backend: "192.168.1.10:53"
+```
 
-### Disable a backend
+### `dnsdist.disable_server`
+
+```yaml
 service: dnsdist.disable_server
 data:
   host: "amandil"
   backend: "192.168.1.10:53"
+```
 
-### Get backends (results logged)
+### `dnsdist.get_backends`
+
+```yaml
 service: dnsdist.get_backends
 data:
-  host: "amandil"  # optional; if omitted, all hosts
+  host: "amandil"  # optional; runs on all hosts when omitted
+```
 
 ---
 
-## Device Buttons
+## 🕹 Device Buttons <a id="device-buttons"></a>
 
-Each **host** and **group** device exposes:
-
-- **Clear Cache** — confirmation required; for groups, runs on all member hosts.
+Each host or group device exposes a single **Clear Cache** button. Confirmation is required, and group presses cascade to every member host.
 
 ---
 
-## Diagnostics
+## 🧪 Diagnostics <a id="diagnostics"></a>
 
-Go to **Settings → Devices & Services → PowerDNS dnsdist → ... → Download diagnostics**.  
-Sensitive fields (e.g., API key) are redacted.
-
----
-
-## Troubleshooting
-
-- **Counters & Recorder**  
-  Monotonic counters are unitless `TOTAL_INCREASING` — safe for long-term statistics.
-- **Device page linking**  
-  Distinct `DeviceInfo.identifiers` avoid collisions between hosts and groups.
-- **Group shows “No active members yet” at startup**  
-  Normal until each member host completes its first refresh.
-- **REST requirements on dnsdist**  
-  Ensure the dnsdist **webserver** is enabled with an **API key** and proper **ACL** to your HA network.
+Visit **Settings → Devices & Services → PowerDNS dnsdist → ⋮ → Download diagnostics**. The export automatically redacts secrets such as API keys.
 
 ---
 
-## File Map
+## 🩺 Troubleshooting <a id="troubleshooting"></a>
 
+- **Counters & Recorder** — Monotonic counters use `TOTAL_INCREASING` and the `count` unit, so long-term statistics stay healthy.
+- **Device page linking** — Host and group devices use unique `DeviceInfo.identifiers`, preventing cross-linking.
+- **Group shows “No active members yet”** — Normal until each member host completes its first refresh.
+- **REST prerequisites on dnsdist** — Ensure the dnsdist webserver is enabled, has an API key, and allows your Home Assistant network in the ACL.
+
+---
+
+## 🗂 File Map <a id="file-map"></a>
+
+```
 custom_components/dnsdist/
   __init__.py
   manifest.json
@@ -180,12 +211,13 @@ custom_components/dnsdist/
   translations/
     en.json
   services.yaml
+```
 
 ---
 
-## Changelog
+## 📝 Changelog <a id="changelog"></a>
 
--### 1.1.9
+### 1.1.9
 - Preserve hourly and daily dnsdist query history across Home Assistant restarts so rolling rate sensors stay accurate.
 
 ### 1.1.8
@@ -225,6 +257,6 @@ custom_components/dnsdist/
 
 ---
 
-## License
+## 📄 License <a id="license"></a>
 
-**MIT** — see `LICENSE`.
+**MIT** — see [`LICENSE`](LICENSE).
