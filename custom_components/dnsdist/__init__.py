@@ -71,6 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         members = list(data.get(CONF_MEMBERS, []))
         coordinator = DnsdistGroupCoordinator(
             hass,
+            entry_id=entry.entry_id,
             name=name,
             members=members,
             update_interval=update_interval,
@@ -89,6 +90,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         coordinator = DnsdistCoordinator(
             hass,
+            entry_id=entry.entry_id,
             name=name,
             host=host,
             port=port,

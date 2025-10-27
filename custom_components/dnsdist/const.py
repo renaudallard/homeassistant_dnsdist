@@ -42,3 +42,7 @@ ATTR_FILTERING_RULES = "filtering_rules"
 # New computed rate metrics
 ATTR_REQ_PER_HOUR = "req_per_hour"  # requests/hour over last hour (normalized)
 ATTR_REQ_PER_DAY = "req_per_day"    # requests/day over last 24h (normalized)
+
+# Storage helpers
+STORAGE_VERSION = 1
+STORAGE_KEY_HISTORY = "history"

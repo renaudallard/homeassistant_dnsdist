@@ -14,6 +14,7 @@ from typing import Any, Deque, Tuple
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
@@ -23,9 +24,12 @@ from .const import (
     CONF_VERIFY_SSL,
     CONF_HOST,
     CONF_PORT,
+    DOMAIN,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
     ATTR_FILTERING_RULES,
+    STORAGE_VERSION,
+    STORAGE_KEY_HISTORY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +42,7 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         hass: HomeAssistant,
         *,
+        entry_id: str,
         name: str,
         host: str,
         port: int,
@@ -54,6 +59,7 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=update_interval),
         )
         self._name = name
+        self._entry_id = entry_id
         self._host = host
         self._port = port
         self._api_key = api_key
@@ -65,11 +71,19 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_update_ts: float | None = None
         # Rolling history of (wallclock_ts, queries_counter) for rate sensors
         self._history: Deque[Tuple[float, int]] = deque()  # seconds since epoch, queries
+        self._history_store = Store(
+            hass,
+            STORAGE_VERSION,
+            f"{DOMAIN}_{entry_id}_{STORAGE_KEY_HISTORY}",
+        )
+        self._history_loaded = False
         # Avoid hammering unsupported filtering rules endpoint with 404s
         self._filtering_rules_supported: bool | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch and normalize dnsdist stats."""
+        await self._async_ensure_history_loaded()
+
         url = f"{self._base_url}/api/v1/servers/localhost/statistics"
         headers = {"X-API-Key": self._api_key} if self._api_key else {}
 
@@ -182,6 +196,8 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             _LOGGER.debug("[%s] Rate computation failed: %s", self._name, err)
 
+        await self._async_save_history()
+
         try:
             rules = await self._async_fetch_filtering_rules(session, headers)
             if rules is not None:
@@ -190,6 +206,62 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.debug("[%s] Filtering rules fetch failed: %s", self._name, err)
 
         return normalized
+
+    async def _async_ensure_history_loaded(self) -> None:
+        """Load persisted history once so rate sensors survive restarts."""
+
+        if self._history_loaded:
+            return
+
+        self._history_loaded = True
+
+        try:
+            stored = await self._history_store.async_load()
+        except Exception as err:
+            _LOGGER.debug("[%s] Failed to load history: %s", self._name, err)
+            return
+
+        if not isinstance(stored, dict):
+            return
+
+        entries = stored.get(STORAGE_KEY_HISTORY)
+        if not isinstance(entries, list):
+            return
+
+        cutoff = time.time() - 86400
+        history: list[tuple[float, int]] = []
+
+        for item in entries:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                continue
+            ts_raw, val_raw = item
+            try:
+                ts = float(ts_raw)
+                queries = int(val_raw)
+            except (TypeError, ValueError):
+                continue
+            if ts < cutoff:
+                continue
+            history.append((ts, queries))
+
+        if history:
+            history.sort(key=lambda x: x[0])
+            self._history = deque(history)
+
+    async def _async_save_history(self) -> None:
+        """Persist the rolling history so restarts keep accurate rates."""
+
+        if not self._history_loaded:
+            return
+
+        payload = {
+            STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history],
+        }
+
+        try:
+            await self._history_store.async_save(payload)
+        except Exception as err:
+            _LOGGER.debug("[%s] Failed to save history: %s", self._name, err)
 
     def _zero_data(self) -> dict[str, Any]:
         return {
