@@ -9,6 +9,7 @@ import re
 import time
 from collections import deque
 from datetime import timedelta
+from itertools import islice
 from typing import Any, Deque, Tuple
 
 from homeassistant.helpers.storage import Store
@@ -59,6 +60,8 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             f"{DOMAIN}_{entry_id}_{STORAGE_KEY_HISTORY}",
         )
         self._history_loaded = False
+        self._history_dirty = False
+        self._last_history_persist: float | None = None
         async_dispatcher_connect(hass, SIGNAL_DNSDIST_RELOAD, self._handle_reload_signal)
         _LOGGER.info("Initialized dnsdist group '%s' with members: %s", name, ", ".join(self._members))
 
@@ -181,14 +184,21 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             try:
                 now_ts = time.time()
                 q_total = int(aggregated["queries"])
+                history_changed = False
                 if self._history and q_total < self._history[-1][1]:
                     self._history.clear()
+                    history_changed = True
                 self._history.append((now_ts, q_total))
+                history_changed = True
                 cutoff_24h = now_ts - 86400
                 while self._history and self._history[0][0] < cutoff_24h:
                     self._history.popleft()
+                    history_changed = True
 
-                def window_total(window_seconds: int) -> int:
+                if history_changed:
+                    self._history_dirty = True
+
+                def window_total(window_seconds: int, current_total: int) -> int:
                     """Return observed requests for the trailing window."""
 
                     if not self._history:
@@ -199,7 +209,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     baseline = float(prev_q)
 
                     if prev_ts < horizon:
-                        for ts, qq in list(self._history)[1:]:
+                        for ts, qq in islice(self._history, 1, None):
                             if ts < horizon:
                                 prev_ts, prev_q = ts, qq
                                 continue
@@ -220,11 +230,11 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     else:
                         baseline = float(prev_q)
 
-                    delta = q_total - int(baseline)
+                    delta = current_total - int(baseline)
                     return max(0, delta)
 
-                aggregated[ATTR_REQ_PER_HOUR] = window_total(3600)
-                aggregated[ATTR_REQ_PER_DAY] = window_total(86400)
+                aggregated[ATTR_REQ_PER_HOUR] = window_total(3600, q_total)
+                aggregated[ATTR_REQ_PER_DAY] = window_total(86400, q_total)
             except Exception as err:
                 _LOGGER.debug("[%s] Group rate computation failed: %s", self._name, err)
 
@@ -278,12 +288,17 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if history:
             history.sort(key=lambda x: x[0])
             self._history = deque(history)
+        self._history_dirty = False
 
     async def _async_save_history(self) -> None:
         """Persist the aggregated history for restart continuity."""
 
-        if not self._history_loaded:
+        if not self._history_loaded or not self._history_dirty:
             return
+
+        if self._last_history_persist is not None:
+            if time.monotonic() - self._last_history_persist < 30:
+                return
 
         payload = {
             STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history],
@@ -291,6 +306,8 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         try:
             await self._history_store.async_save(payload)
+            self._history_dirty = False
+            self._last_history_persist = time.monotonic()
         except Exception as err:
             _LOGGER.debug("[%s] Failed to save group history: %s", self._name, err)
 

@@ -8,6 +8,7 @@ import re
 import time
 from collections import deque
 from datetime import timedelta
+from itertools import islice
 from asyncio import timeout
 from time import monotonic
 from typing import Any, Deque, Tuple
@@ -71,6 +72,8 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_update_ts: float | None = None
         # Rolling history of (wallclock_ts, queries_counter) for rate sensors
         self._history: Deque[Tuple[float, int]] = deque()  # seconds since epoch, queries
+        self._history_dirty = False
+        self._last_history_persist: float | None = None
         self._history_store = Store(
             hass,
             STORAGE_VERSION,
@@ -137,20 +140,27 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             now_ts = time.time()
             q = int(normalized.get("queries", 0))
+            history_changed = False
             # Reset history if counter went backwards (service restart)
             if self._history and q < self._history[-1][1]:
                 self._history.clear()
+                history_changed = True
             self._history.append((now_ts, q))
+            history_changed = True
             # Trim to last 24h
             cutoff_24h = now_ts - 86400
             while self._history and self._history[0][0] < cutoff_24h:
                 self._history.popleft()
+                history_changed = True
+
+            if history_changed:
+                self._history_dirty = True
 
             # Helper to compute total requests over the trailing window without
             # normalizing the value to a full period. This ensures the reported
             # rate reflects the actual volume observed in the rolling window
             # instead of an extrapolated value.
-            def window_total(window_seconds: int) -> int:
+            def window_total(window_seconds: int, current_total: int) -> int:
                 """Return observed requests inside the trailing window."""
 
                 if not self._history:
@@ -161,7 +171,7 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 baseline = float(prev_q)
 
                 if prev_ts < horizon:
-                    for ts, qq in list(self._history)[1:]:
+                    for ts, qq in islice(self._history, 1, None):
                         if ts < horizon:
                             prev_ts, prev_q = ts, qq
                             continue
@@ -182,11 +192,11 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 else:
                     baseline = float(prev_q)
 
-                delta = q - int(baseline)
+                delta = current_total - int(baseline)
                 return max(0, delta)
 
-            reqph = window_total(3600)      # requests observed in the last hour
-            reqpd = window_total(86400)     # requests observed in the last 24 hours
+            reqph = window_total(3600, q)      # requests observed in the last hour
+            reqpd = window_total(86400, q)     # requests observed in the last 24 hours
 
             normalized[ATTR_REQ_PER_HOUR] = reqph
             normalized[ATTR_REQ_PER_DAY] = reqpd
@@ -247,12 +257,17 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if history:
             history.sort(key=lambda x: x[0])
             self._history = deque(history)
+        self._history_dirty = False
 
     async def _async_save_history(self) -> None:
         """Persist the rolling history so restarts keep accurate rates."""
 
-        if not self._history_loaded:
+        if not self._history_loaded or not self._history_dirty:
             return
+
+        if self._last_history_persist is not None:
+            if monotonic() - self._last_history_persist < 30:
+                return
 
         payload = {
             STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history],
@@ -260,6 +275,8 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         try:
             await self._history_store.async_save(payload)
+            self._history_dirty = False
+            self._last_history_persist = monotonic()
         except Exception as err:
             _LOGGER.debug("[%s] Failed to save history: %s", self._name, err)
 
