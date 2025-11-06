@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import asyncio
@@ -30,6 +31,66 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Regex patterns for hostname/IP validation
+# Hostname pattern: RFC 1123 compliant (letters, digits, hyphens, dots)
+_HOSTNAME_PATTERN = re.compile(
+    r"^(?=.{1,253}$)"  # Total length limit
+    r"(?:(?!-)[A-Za-z0-9-]{1,63}(?<!-)\.)*"  # Subdomains
+    r"(?!-)[A-Za-z0-9-]{1,63}(?<!-)$"  # Final label
+)
+
+# IPv4 pattern: 0-255.0-255.0-255.0-255
+_IPV4_PATTERN = re.compile(
+    r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
+    r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+)
+
+# IPv6 pattern: simplified pattern for common IPv6 formats
+_IPV6_PATTERN = re.compile(
+    r"^(?:"
+    r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|"  # Full format
+    r"(?:[0-9a-fA-F]{1,4}:){1,7}:|"  # With trailing ::
+    r"(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|"  # :: in middle
+    r"::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|"  # :: at start
+    r"::|"  # Loopback shorthand
+    r"::1"  # Loopback
+    r")$"
+)
+
+
+def validate_host(host: str) -> str:
+    """Validate hostname or IP address format."""
+    if not host or not isinstance(host, str):
+        raise vol.Invalid("Host must be a non-empty string")
+
+    host = host.strip()
+
+    # Check if it's a valid IPv4 address
+    if _IPV4_PATTERN.match(host):
+        return host
+
+    # Check if it's a valid IPv6 address (with or without brackets)
+    host_unwrapped = host.strip("[]")
+    if _IPV6_PATTERN.match(host_unwrapped):
+        return host
+
+    # Reject strings that look like malformed IPv4 addresses
+    # (all-numeric labels separated by dots)
+    if re.match(r"^[\d.]+$", host):
+        raise vol.Invalid(
+            f"Invalid IPv4 address format: '{host}'. "
+            "IPv4 addresses must have exactly 4 octets (0-255) separated by dots"
+        )
+
+    # Check if it's a valid hostname
+    if _HOSTNAME_PATTERN.match(host):
+        return host
+
+    raise vol.Invalid(
+        f"Invalid host format: '{host}'. "
+        "Must be a valid hostname, IPv4 address, or IPv6 address"
+    )
+
 
 async def _validate_connection(
     hass: HomeAssistant,
@@ -39,7 +100,7 @@ async def _validate_connection(
     use_https: bool,
     verify_ssl: bool,
 ) -> bool:
-    """Try connecting to the dnsdist API."""
+    """Try connecting to the dnsdist API and validate response structure."""
     protocol = "https" if use_https else "http"
     url = f"{protocol}://{host}:{port}/api/v1/servers/localhost/statistics"
     headers = {"X-API-Key": api_key} if api_key else {}
@@ -50,11 +111,49 @@ async def _validate_connection(
     try:
         async with asyncio.timeout(5):
             async with session.get(url, headers=headers, ssl=verify_ssl) as resp:
-                if resp.status == 200:
-                    _LOGGER.debug("dnsdist connection succeeded for %s:%s", host, port)
-                    return True
-                _LOGGER.warning("dnsdist API returned HTTP %s for %s:%s", resp.status, host, port)
-                return False
+                if resp.status != 200:
+                    _LOGGER.warning("dnsdist API returned HTTP %s for %s:%s", resp.status, host, port)
+                    return False
+
+                # Validate JSON response structure
+                try:
+                    data = await resp.json()
+                except Exception as json_err:
+                    _LOGGER.warning(
+                        "dnsdist API response is not valid JSON for %s:%s: %s",
+                        host, port, json_err
+                    )
+                    return False
+
+                # Verify this is a dnsdist statistics response
+                # dnsdist statistics typically include these core fields
+                required_fields = ["queries", "responses"]
+                if not isinstance(data, dict):
+                    _LOGGER.warning(
+                        "dnsdist API response is not a dictionary for %s:%s",
+                        host, port
+                    )
+                    return False
+
+                missing_fields = [field for field in required_fields if field not in data]
+                if missing_fields:
+                    _LOGGER.warning(
+                        "dnsdist API response missing required fields %s for %s:%s. "
+                        "This may not be a dnsdist endpoint.",
+                        missing_fields, host, port
+                    )
+                    return False
+
+                _LOGGER.debug(
+                    "dnsdist connection validated successfully for %s:%s "
+                    "(found %d statistics fields)",
+                    host, port, len(data)
+                )
+                return True
+
+    except asyncio.TimeoutError:
+        _LOGGER.error("dnsdist connection timeout for %s:%s", host, port)
+        return False
     except Exception as err:
         _LOGGER.error("dnsdist connection error for %s:%s: %s", host, port, err)
         return False
@@ -82,7 +181,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
-                vol.Required(CONF_HOST): str,
+                vol.Required(CONF_HOST): vol.All(str, validate_host),
                 vol.Required(CONF_PORT, default=8083): vol.All(int, vol.Range(min=1, max=65535)),
                 vol.Optional(CONF_API_KEY, default=""): str,
                 vol.Optional(CONF_USE_HTTPS, default=False): bool,
