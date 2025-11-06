@@ -1,4 +1,3 @@
-# 202510231345
 """Coordinator for PowerDNS dnsdist hosts."""
 
 from __future__ import annotations

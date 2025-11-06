@@ -1,4 +1,3 @@
-# 202510231445
 """PowerDNS dnsdist integration for Home Assistant."""
 
 from __future__ import annotations

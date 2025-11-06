@@ -1,5 +1,3 @@
-# 202510231625
-
 clear_cache:
   name: Clear cache
   description: Clear the dnsdist packet cache via REST (expunge all entries in the selected pool).

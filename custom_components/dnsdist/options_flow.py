@@ -1,4 +1,3 @@
-# 202510231130
 """Options flow for PowerDNS dnsdist integration."""
 
 from __future__ import annotations

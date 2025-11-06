@@ -1,4 +1,3 @@
-# 202510231345
 """Group coordinator for aggregated PowerDNS dnsdist statistics."""
 
 from __future__ import annotations

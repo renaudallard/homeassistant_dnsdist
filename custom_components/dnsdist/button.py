@@ -1,4 +1,3 @@
-# 202510231625
 """Buttons for PowerDNS dnsdist integration (REST-only actions)."""
 
 from __future__ import annotations

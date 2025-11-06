@@ -1,5 +1,4 @@
 {
-  "_version": "202511040900",
   "title": "PowerDNS dnsdist",
   "config": {
     "step": {

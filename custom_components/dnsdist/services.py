@@ -1,4 +1,3 @@
-# 202510231625
 """Service registration for PowerDNS dnsdist integration (REST-only)."""
 
 from __future__ import annotations

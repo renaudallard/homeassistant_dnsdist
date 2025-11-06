@@ -1,4 +1,3 @@
-# 202510231445
 """Constants for the PowerDNS dnsdist integration."""
 
 DOMAIN = "dnsdist"

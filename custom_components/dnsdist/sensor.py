@@ -1,4 +1,3 @@
-# 202510231400
 """Sensors for PowerDNS dnsdist integration."""
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.1.11-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.1.12-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -33,7 +33,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.1.11** |
+| **Current version** | **1.1.12** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -81,10 +81,12 @@
 
 - **Name:** Display name for Home Assistant
 - **Host / Port:** dnsdist API endpoint (default port `8083`)
+- **Host validation:** Enforces RFC 1123 hostnames plus IPv4/IPv6 literals, catching typos before the connection test
 - **API Key:** Optional; securely stored when supported
 - **Use HTTPS / Verify SSL:** Toggle TLS and certificate validation
 - **Update interval (s):** Polling frequency (default `30`)
 - **Include filtering rule sensors:** Disabled by default; enable to expose per-rule sensors
+- **Connection verification:** Setup now requires a valid dnsdist statistics JSON payload before finishing, so wrong URLs or non-json endpoints fail fast
 
 ### Add a Group
 
@@ -216,6 +218,10 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.1.12
+- Validate host entries against RFC 1123 hostnames plus IPv4/IPv6 literals directly in the config flow to prevent mis-typed endpoints.
+- The connection test now parses the dnsdist statistics JSON and verifies required counters before setup completes, catching wrong URLs or non-dnsdist services early.
 
 ### 1.1.11
 - Further streamline rolling-window rate calculations for host and group coordinators to minimize allocations and disk writes.
