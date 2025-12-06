@@ -18,6 +18,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare HACS manifest for validation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("hacs.json")
+          data = json.loads(path.read_text())
+          allowed = {
+              "name",
+              "content_in_root",
+              "render_readme",
+              "country",
+              "homeassistant",
+              "zip_release",
+              "filename",
+              "persistent_directory",
+              "source",
+          }
+          sanitized = {k: v for k, v in data.items() if k in allowed}
+          sanitized.setdefault("country", "ALL")
+          path.write_text(json.dumps(sanitized, indent=2) + "\n")
+          PY
+
       - name: Run HACS validation
         uses: hacs/action@main
         with:
