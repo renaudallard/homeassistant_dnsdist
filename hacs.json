@@ -4,12 +4,12 @@
   "render_readme": true,
   "country": "ALL",
   "homeassistant": "2025.1.0",
-  "domains": ["dnsdist"],
-  "iot_class": "local_polling",
-  "integration_type": "hub",
-  "codeowners": ["@renaudallard"],
-  "issue_tracker": "https://github.com/renaudallard/homeassistant_dnsdist/issues",
-  "documentation": "https://github.com/renaudallard/homeassistant_dnsdist/blob/main/README.md",
-  "categories": ["integration"],
-  "description": "Monitor and control PowerDNS dnsdist instances directly from Home Assistant with HTTPS, diagnostics, and group aggregation."
+  "topics": [
+    "home-assistant",
+    "hacs",
+    "custom-component",
+    "integration",
+    "dnsdist",
+    "powerdns"
+  ]
 }
