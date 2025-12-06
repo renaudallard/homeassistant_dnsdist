@@ -17,7 +17,5 @@
   "dependencies": [],
   "loggers": [
     "custom_components.dnsdist"
-  ],
-  "diagnostics": true,
-  "homeassistant": "2025.10.0"
+  ]
 }
