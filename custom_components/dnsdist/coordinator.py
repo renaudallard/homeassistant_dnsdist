@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import time
 from collections import deque
 from datetime import timedelta
@@ -17,22 +16,21 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
-
 from .const import (
+    ATTR_FILTERING_RULES,
+    ATTR_REQ_PER_DAY,
+    ATTR_REQ_PER_HOUR,
     CONF_API_KEY,
+    CONF_HOST,
+    CONF_PORT,
     CONF_UPDATE_INTERVAL,
     CONF_USE_HTTPS,
     CONF_VERIFY_SSL,
-    CONF_HOST,
-    CONF_PORT,
     DOMAIN,
-    ATTR_REQ_PER_DAY,
-    ATTR_REQ_PER_HOUR,
-    ATTR_FILTERING_RULES,
-    STORAGE_VERSION,
     STORAGE_KEY_HISTORY,
+    STORAGE_VERSION,
 )
+from .utils import coerce_int, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -420,19 +418,6 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _normalize_filtering_rule(self, item: dict[str, Any]) -> dict[str, Any] | None:
         """Normalize a filtering rule entry."""
-
-        def _coerce_int(value: Any) -> int:
-            try:
-                if isinstance(value, bool):
-                    return int(value)
-                if isinstance(value, (int, float)):
-                    return int(value)
-                if isinstance(value, str):
-                    return int(float(value))
-            except (TypeError, ValueError):
-                return 0
-            return 0
-
         name = str(item.get("name") or item.get("rule") or item.get("uuid") or item.get("id") or "Unnamed Rule").strip()
         if not name:
             name = "Unnamed Rule"
@@ -440,11 +425,11 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         matches = 0
         for key in ("matches", "numMatches", "hits", "num_hits", "hitCount", "count"):
             if key in item:
-                matches = _coerce_int(item.get(key))
+                matches = coerce_int(item.get(key))
                 break
 
         slug_source = item.get("uuid") or item.get("id") or name
-        slug = self._slugify_rule(slug_source)
+        slug = slugify_rule(slug_source)
 
         rule = {
             "slug": slug,
@@ -460,10 +445,3 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
         return rule
-
-    def _slugify_rule(self, value: Any) -> str:
-        base = str(value or "").lower()
-        base = _SLUG_PATTERN.sub("-", base).strip("-")
-        if not base:
-            base = f"rule-{abs(hash(value)) & 0xFFFF:x}"
-        return base
