@@ -124,16 +124,32 @@ async def _validate_connection(
                     return False
 
                 # Verify this is a dnsdist statistics response
-                # dnsdist statistics typically include these core fields
-                required_fields = ["queries", "responses"]
-                if not isinstance(data, dict):
+                # dnsdist can return either a list of {name, value} items or a dict
+                required_fields = {"queries", "responses"}
+
+                if isinstance(data, list):
+                    # List format: [{"name": "queries", "value": 123}, ...]
+                    found_fields = {
+                        item.get("name") for item in data
+                        if isinstance(item, dict) and "name" in item
+                    }
+                elif isinstance(data, dict):
+                    # Dict format: {"queries": 123, ...} or {"statistics": [...]}
+                    if "statistics" in data and isinstance(data["statistics"], list):
+                        found_fields = {
+                            item.get("name") for item in data["statistics"]
+                            if isinstance(item, dict) and "name" in item
+                        }
+                    else:
+                        found_fields = set(data.keys())
+                else:
                     _LOGGER.warning(
-                        "dnsdist API response is not a dictionary for %s:%s",
+                        "dnsdist API response has unexpected type for %s:%s",
                         host, port
                     )
                     return False
 
-                missing_fields = [field for field in required_fields if field not in data]
+                missing_fields = required_fields - found_fields
                 if missing_fields:
                     _LOGGER.warning(
                         "dnsdist API response missing required fields %s for %s:%s. "
@@ -176,6 +192,17 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Add a single dnsdist host."""
         errors: dict[str, str] = {}
 
+        # Keys expected in this step's form
+        expected_keys = {
+            CONF_NAME, CONF_HOST, CONF_PORT, CONF_API_KEY,
+            CONF_USE_HTTPS, CONF_VERIFY_SSL, CONF_UPDATE_INTERVAL,
+            CONF_INCLUDE_FILTER_SENSORS,
+        }
+
+        # Filter out any keys from previous steps (e.g., 'mode' from async_step_user)
+        if user_input is not None:
+            user_input = {k: v for k, v in user_input.items() if k in expected_keys}
+
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
@@ -189,7 +216,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
-        if user_input is None:
+        if not user_input:
             return self.async_show_form(step_id="add_hub", data_schema=schema)
 
         name = user_input[CONF_NAME]
@@ -228,13 +255,20 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Add an aggregated group."""
         errors: dict[str, str] = {}
 
+        # Keys expected in this step's form
+        expected_keys = {CONF_NAME, CONF_MEMBERS, CONF_UPDATE_INTERVAL, CONF_INCLUDE_FILTER_SENSORS}
+
+        # Filter out any keys from previous steps (e.g., 'mode' from async_step_user)
+        if user_input is not None:
+            user_input = {k: v for k, v in user_input.items() if k in expected_keys}
+
         # Determine available host names from existing host entries
         entries = [e for e in self._async_current_entries() if not e.data.get(CONF_IS_GROUP)]
         available_hosts = {e.data.get(CONF_NAME, e.title) for e in entries}
         if not available_hosts:
             errors["base"] = "no_hosts"
 
-        if user_input is not None and not errors:
+        if user_input and not errors:
             group_name = user_input[CONF_NAME]
             members = user_input.get(CONF_MEMBERS, [])
             update_interval = user_input.get(CONF_UPDATE_INTERVAL, 30)
