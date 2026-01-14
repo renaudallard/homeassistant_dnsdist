@@ -87,7 +87,6 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
 
             if not active_members:
                 _LOGGER.debug("[%s] No active members yet", self._name)
-                await asyncio.sleep(2)
                 return self._last_data
 
             totals = {
