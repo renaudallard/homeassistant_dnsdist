@@ -25,6 +25,7 @@ from .const import (
     CONF_USE_HTTPS,
     CONF_VERIFY_SSL,
     DOMAIN,
+    SECURITY_STATUS_MAP,
     STORAGE_VERSION,
 )
 from .utils import HistoryMixin, coerce_int, compute_window_total, slugify_rule
@@ -221,14 +222,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                     normalized["cpu_user_msec"] = int(val)
                 elif key in ("security-status", "security_status"):
                     sec = int(val)
-                    if sec == 0:
-                        normalized["security_status"] = "unknown"
-                    elif sec == 1:
-                        normalized["security_status"] = "ok"
-                    elif sec == 2:
-                        normalized["security_status"] = "warning"
-                    elif sec == 3:
-                        normalized["security_status"] = "critical"
+                    normalized["security_status"] = SECURITY_STATUS_MAP.get(sec, "unknown")
 
             # Compute cache hit % (rounded to 0 decimals to match % as integer? keep 2 decimals if you prefer)
             hits = normalized["cache_hits"]

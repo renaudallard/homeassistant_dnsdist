@@ -45,3 +45,29 @@ ATTR_REQ_PER_DAY = "req_per_day"    # requests/day over last 24h (normalized)
 # Storage helpers
 STORAGE_VERSION = 1
 STORAGE_KEY_HISTORY = "history"
+
+# Security status mappings (dnsdist API code -> string)
+SECURITY_STATUS_MAP = {
+    0: "unknown",
+    1: "ok",
+    2: "warning",
+    3: "critical",
+}
+
+# Security status reverse mapping (string -> code)
+SECURITY_STATUS_CODE = {
+    "unknown": 0,
+    "ok": 1,
+    "secure": 1,  # alias for ok
+    "warning": 2,
+    "critical": 3,
+}
+
+# Security status human-readable labels
+SECURITY_STATUS_LABEL = {
+    "unknown": "Unknown",
+    "ok": "OK",
+    "secure": "OK",
+    "warning": "Upgrade Recommended",
+    "critical": "Upgrade Required",
+}

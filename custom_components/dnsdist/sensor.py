@@ -17,7 +17,14 @@ from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import ATTR_FILTERING_RULES, CONF_INCLUDE_FILTER_SENSORS, CONF_IS_GROUP, DOMAIN
+from .const import (
+    ATTR_FILTERING_RULES,
+    CONF_INCLUDE_FILTER_SENSORS,
+    CONF_IS_GROUP,
+    DOMAIN,
+    SECURITY_STATUS_CODE,
+    SECURITY_STATUS_LABEL,
+)
 from .utils import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -182,20 +189,8 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
 
         elif self._key == "security_status":
             status = str(self.native_value or "").lower()
-            attrs["status_code"] = {
-                "unknown": 0,
-                "ok": 1,
-                "secure": 1,
-                "warning": 2,
-                "critical": 3,
-            }.get(status, 0)
-            attrs["status_label"] = {
-                "unknown": "Unknown",
-                "ok": "OK",
-                "secure": "OK",
-                "warning": "Upgrade Recommended",
-                "critical": "Upgrade Required",
-            }.get(status, "Unknown")
+            attrs["status_code"] = SECURITY_STATUS_CODE.get(status, 0)
+            attrs["status_label"] = SECURITY_STATUS_LABEL.get(status, "Unknown")
 
         return attrs
 
