@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
+from asyncio import timeout, TimeoutError as AsyncTimeoutError
 from typing import Any
-
-import asyncio
 
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
@@ -108,7 +107,7 @@ async def _validate_connection(
     session = async_get_clientsession(hass)
 
     try:
-        async with asyncio.timeout(5):
+        async with timeout(5):
             async with session.get(url, headers=headers, ssl=verify_ssl) as resp:
                 if resp.status != 200:
                     _LOGGER.warning("dnsdist API returned HTTP %s for %s:%s", resp.status, host, port)
@@ -150,7 +149,7 @@ async def _validate_connection(
                 )
                 return True
 
-    except asyncio.TimeoutError:
+    except AsyncTimeoutError:
         _LOGGER.error("dnsdist connection timeout for %s:%s", host, port)
         return False
     except Exception as err:
