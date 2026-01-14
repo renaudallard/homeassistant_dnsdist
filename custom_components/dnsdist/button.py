@@ -11,7 +11,8 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, CONF_IS_GROUP, CONF_MEMBERS
+from .const import CONF_IS_GROUP, CONF_MEMBERS, DOMAIN
+from .utils import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,18 +44,7 @@ class DnsdistActionButton(CoordinatorEntity, ButtonEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        name = getattr(self.coordinator, "_name", "dnsdist")
-        identifier = f"group:{name}" if self._is_group else f"host:{name}"
-        info: DeviceInfo = DeviceInfo(
-            identifiers={(DOMAIN, identifier)},
-            name=name,
-            manufacturer="PowerDNS",
-            model="dnsdist Group" if self._is_group else "dnsdist Host",
-        )
-        if not self._is_group and hasattr(self.coordinator, "_host"):
-            proto = "https" if getattr(self.coordinator, "_use_https", False) else "http"
-            info["configuration_url"] = f"{proto}://{self.coordinator._host}:{self.coordinator._port}"
-        return info
+        return build_device_info(self.coordinator, self._is_group)
 
     async def _targets(self) -> AsyncIterator[str | None]:
         if self._is_group and self._members:
