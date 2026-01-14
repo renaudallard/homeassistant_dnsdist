@@ -140,6 +140,8 @@ def compute_window_total(
                     baseline = float(prev_q)
             break
         else:
+            # for/else: executes if loop completes without break, meaning all
+            # history entries are older than horizon; use the most recent value
             baseline = float(history[-1][1])
     else:
         baseline = float(prev_q)
