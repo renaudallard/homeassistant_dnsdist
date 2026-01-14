@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.1.15-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.1.16-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -34,7 +34,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.1.15** |
+| **Current version** | **1.1.16** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -220,6 +220,14 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.1.16
+- Fix ruff linting errors: remove unused imports and fix module-level import ordering.
+- Add missing `monotonic` import in coordinator for CPU timing calculations.
+- Remove unnecessary try/except around dict.get() in sensor module.
+- Remove blocking `asyncio.sleep` call in group coordinator that could cause timeouts.
+- Add type hints to coordinator methods for improved code clarity.
+- Standardize asyncio timeout import style across modules.
 
 ### 1.1.15
 - Refactor codebase to eliminate code duplication across coordinator modules.
