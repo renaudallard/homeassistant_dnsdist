@@ -211,7 +211,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
-                vol.Required(CONF_HOST): vol.All(str, validate_host),
+                vol.Required(CONF_HOST): str,
                 vol.Required(CONF_PORT, default=8083): vol.All(int, vol.Range(min=1, max=65535)),
                 vol.Optional(CONF_API_KEY, default=""): str,
                 vol.Optional(CONF_USE_HTTPS, default=False): bool,
@@ -230,7 +230,14 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
 
         name = user_input[CONF_NAME]
-        host = user_input[CONF_HOST]
+
+        # Validate host format manually (can't use custom validators in schema due to serialization)
+        try:
+            host = validate_host(user_input[CONF_HOST])
+        except vol.Invalid as err:
+            _LOGGER.debug("Host validation failed: %s", err)
+            errors[CONF_HOST] = "invalid_host"
+            return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
         port = user_input.get(CONF_PORT, 8083)
         api_key = user_input.get(CONF_API_KEY, "") or None
         use_https = user_input.get(CONF_USE_HTTPS, False)

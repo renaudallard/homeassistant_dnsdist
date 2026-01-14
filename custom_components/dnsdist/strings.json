@@ -41,7 +41,8 @@
       "required": "This field is required.",
       "no_members": "You must select at least one member.",
       "duplicate": "An entry with this name already exists.",
-      "no_hosts": "You must add at least one dnsdist host before creating a group."
+      "no_hosts": "You must add at least one dnsdist host before creating a group.",
+      "invalid_host": "Invalid host format. Enter a valid hostname, IPv4, or IPv6 address."
     },
     "abort": {
       "single_instance_allowed": "PowerDNS dnsdist supports only one configuration.",
