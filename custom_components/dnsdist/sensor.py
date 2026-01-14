@@ -17,30 +17,10 @@ from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN, CONF_IS_GROUP, CONF_INCLUDE_FILTER_SENSORS, ATTR_FILTERING_RULES
+from .const import ATTR_FILTERING_RULES, CONF_INCLUDE_FILTER_SENSORS, CONF_IS_GROUP, DOMAIN
+from .utils import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _build_device_info(coordinator, is_group: bool) -> DeviceInfo:
-    """Build device information shared by sensors."""
-
-    name = getattr(coordinator, "_name", "dnsdist")
-    identifier = f"group:{name}" if is_group else f"host:{name}"
-
-    info: DeviceInfo = DeviceInfo(
-        identifiers={(DOMAIN, identifier)},
-        name=name,
-        manufacturer="PowerDNS",
-        model="dnsdist Group" if is_group else "dnsdist Host",
-        entry_type=None,
-    )
-
-    if not is_group and hasattr(coordinator, "_host"):
-        proto = "https" if getattr(coordinator, "_use_https", False) else "http"
-        info["configuration_url"] = f"{proto}://{coordinator._host}:{coordinator._port}"
-
-    return info
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -229,7 +209,7 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Create a distinct device per host or group."""
-        return _build_device_info(self.coordinator, self._is_group)
+        return build_device_info(self.coordinator, self._is_group)
 
 
 class DnsdistFilteringRuleSensor(CoordinatorEntity, SensorEntity):
@@ -311,4 +291,4 @@ class DnsdistFilteringRuleSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return _build_device_info(self.coordinator, self._is_group)
+        return build_device_info(self.coordinator, self._is_group)
