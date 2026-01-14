@@ -13,6 +13,7 @@ from typing import Any, Deque, Tuple
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN, STORAGE_KEY_HISTORY
 
@@ -66,11 +67,11 @@ def coerce_int(value: Any) -> int:
     return 0
 
 
-def build_device_info(coordinator, is_group: bool) -> DeviceInfo:
+def build_device_info(coordinator: DataUpdateCoordinator[Any], is_group: bool) -> DeviceInfo:
     """Build device information shared by entities.
 
     Args:
-        coordinator: The data coordinator instance.
+        coordinator: The data coordinator instance (DnsdistCoordinator or DnsdistGroupCoordinator).
         is_group: Whether this is a group coordinator.
 
     Returns:
