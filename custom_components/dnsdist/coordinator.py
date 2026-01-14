@@ -143,7 +143,6 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Reset history if counter went backwards (service restart)
             if self._history and q < self._history[-1][1]:
                 self._history.clear()
-                history_changed = True
             self._history.append((now_ts, q))
             history_changed = True
             # Trim to last 24h
