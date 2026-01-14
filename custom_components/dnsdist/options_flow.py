@@ -122,7 +122,9 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
             schema = vol.Schema(
                 {
                     vol.Required(CONF_NAME, default=name): str,
-                    vol.Optional(CONF_UPDATE_INTERVAL, default=update_interval): vol.All(int, vol.Range(min=10, max=600)),
+                    vol.Optional(CONF_UPDATE_INTERVAL, default=update_interval): vol.All(
+                        int, vol.Range(min=10, max=600)
+                    ),
                     vol.Optional(
                         CONF_INCLUDE_FILTER_SENSORS, default=include_filter_sensors
                     ): bool,

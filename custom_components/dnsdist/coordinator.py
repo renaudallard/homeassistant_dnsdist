@@ -99,7 +99,8 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             data = dict(self.data or self._zero_data())
             return data
 
-        _LOGGER.debug("[%s] Raw dnsdist stats (first 10): %s", self._name, stats[:10] if isinstance(stats, list) else stats)
+        stats_preview = stats[:10] if isinstance(stats, list) else stats
+        _LOGGER.debug("[%s] Raw dnsdist stats (first 10): %s", self._name, stats_preview)
 
         normalized = self._normalize(stats)
 

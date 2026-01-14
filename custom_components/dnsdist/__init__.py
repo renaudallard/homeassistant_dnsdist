@@ -149,7 +149,10 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.info("[dnsdist] Migrated API key for '%s' to secure storage", entry.title)
             changed = True
         except AttributeError:
-            _LOGGER.warning("[dnsdist] Secure secret API not available; keeping plaintext API key for '%s'.", entry.title)
+            _LOGGER.warning(
+                "[dnsdist] Secure secret API not available; keeping plaintext API key for '%s'.",
+                entry.title,
+            )
         except Exception as err:
             _LOGGER.warning("[dnsdist] Could not migrate API key for '%s': %s", entry.title, err)
 
