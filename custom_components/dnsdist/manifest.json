@@ -17,5 +17,5 @@
     "custom_components.dnsdist"
   ],
   "requirements": [],
-  "version": "1.1.14"
+  "version": "1.1.15"
 }
