@@ -14,7 +14,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     DOMAIN,
-    PLATFORMS,
     SIGNAL_DNSDIST_RELOAD,
     CONF_NAME,
     CONF_HOST,

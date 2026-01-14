@@ -11,8 +11,6 @@ from homeassistant.components.sensor import (
 )
 import homeassistant.const as ha_const
 from homeassistant.const import UnitOfTime, PERCENTAGE
-
-COUNT = getattr(ha_const, "COUNT", "count")
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -26,6 +24,9 @@ from .const import (
     SECURITY_STATUS_LABEL,
 )
 from .utils import build_device_info
+
+# COUNT constant for sensor units - use HA's COUNT if available, otherwise fallback
+COUNT = getattr(ha_const, "COUNT", "count")
 
 _LOGGER = logging.getLogger(__name__)
 
