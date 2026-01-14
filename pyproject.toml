@@ -1,0 +1,24 @@
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_ignores = true
+show_error_codes = true
+
+# Home Assistant integrations use many dynamic patterns
+# Be lenient with attribute access and assignments
+disable_error_code = ["attr-defined", "assignment", "arg-type", "call-overload", "misc"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
