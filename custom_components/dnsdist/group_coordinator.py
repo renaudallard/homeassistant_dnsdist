@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 from collections import deque
 from datetime import timedelta
@@ -16,17 +15,16 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
-
 from .const import (
+    ATTR_FILTERING_RULES,
+    ATTR_REQ_PER_DAY,
+    ATTR_REQ_PER_HOUR,
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
-    ATTR_REQ_PER_HOUR,
-    ATTR_REQ_PER_DAY,
-    ATTR_FILTERING_RULES,
-    STORAGE_VERSION,
     STORAGE_KEY_HISTORY,
+    STORAGE_VERSION,
 )
+from .utils import coerce_int, slugify, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -137,8 +135,8 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         if not base_name:
                             base_name = "Unnamed Rule"
 
-                        agg_slug = self._slugify_rule_name(base_name)
-                        matches = self._coerce_int(rule.get("matches"))
+                        agg_slug = slugify_rule(base_name)
+                        matches = coerce_int(rule.get("matches"))
 
                         entry = aggregated_rules.setdefault(
                             agg_slug,
@@ -329,29 +327,3 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "req_per_day": 0,
             ATTR_FILTERING_RULES: {},
         }
-
-    def _coerce_int(self, value: Any) -> int:
-        try:
-            if isinstance(value, bool):
-                return int(value)
-            if isinstance(value, (int, float)):
-                return int(value)
-            if isinstance(value, str):
-                return int(float(value))
-        except (TypeError, ValueError):
-            return 0
-        return 0
-
-    def _slugify(self, value: Any) -> str:
-        base = str(value or "").lower()
-        base = _SLUG_PATTERN.sub("-", base).strip("-")
-        if not base:
-            base = "group"
-        return base
-
-    def _slugify_rule_name(self, value: Any) -> str:
-        base = str(value or "").lower()
-        base = _SLUG_PATTERN.sub("-", base).strip("-")
-        if not base:
-            base = f"rule-{abs(hash(value)) & 0xFFFF:x}"
-        return base
