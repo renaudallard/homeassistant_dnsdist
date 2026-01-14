@@ -20,6 +20,7 @@ from .const import (
     ATTR_REQ_PER_HOUR,
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
+    STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
 from .utils import HistoryMixin, coerce_int, compute_window_total, slugify_rule

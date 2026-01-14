@@ -26,6 +26,7 @@ from .const import (
     CONF_VERIFY_SSL,
     DOMAIN,
     SECURITY_STATUS_MAP,
+    STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
 from .utils import HistoryMixin, coerce_int, compute_window_total, slugify_rule
