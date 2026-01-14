@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.1.16-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.1.17-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -37,7 +37,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.1.16** |
+| **Current version** | **1.1.17** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -223,6 +223,13 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.1.17
+- Fix schema serialization error for custom host validator.
+- Fix config flow step transition and API validation.
+- Add debug logging and improve error handling in config flow.
+- Add unit tests for validators and utility functions.
+- Add GitHub Actions workflows for ruff linting and mypy type checking.
 
 ### 1.1.16
 - Fix ruff linting errors: remove unused imports and fix module-level import ordering.
