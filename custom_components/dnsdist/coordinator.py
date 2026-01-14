@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import logging
 import time
+from asyncio import timeout
 from collections import deque
 from datetime import timedelta
-from asyncio import timeout
-from time import monotonic
 from typing import Any, Deque, Tuple
 
 from homeassistant.core import HomeAssistant
@@ -26,15 +25,14 @@ from .const import (
     CONF_USE_HTTPS,
     CONF_VERIFY_SSL,
     DOMAIN,
-    STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
-from .utils import coerce_int, compute_window_total, slugify_rule
+from .utils import HistoryMixin, coerce_int, compute_window_total, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator that polls a single dnsdist host."""
 
     def __init__(
@@ -172,69 +170,6 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.debug("[%s] Filtering rules fetch failed: %s", self._name, err)
 
         return normalized
-
-    async def _async_ensure_history_loaded(self) -> None:
-        """Load persisted history once so rate sensors survive restarts."""
-
-        if self._history_loaded:
-            return
-
-        self._history_loaded = True
-
-        try:
-            stored = await self._history_store.async_load()
-        except Exception as err:
-            _LOGGER.debug("[%s] Failed to load history: %s", self._name, err)
-            return
-
-        if not isinstance(stored, dict):
-            return
-
-        entries = stored.get(STORAGE_KEY_HISTORY)
-        if not isinstance(entries, list):
-            return
-
-        cutoff = time.time() - 86400
-        history: list[tuple[float, int]] = []
-
-        for item in entries:
-            if not isinstance(item, (list, tuple)) or len(item) != 2:
-                continue
-            ts_raw, val_raw = item
-            try:
-                ts = float(ts_raw)
-                queries = int(val_raw)
-            except (TypeError, ValueError):
-                continue
-            if ts < cutoff:
-                continue
-            history.append((ts, queries))
-
-        if history:
-            history.sort(key=lambda x: x[0])
-            self._history = deque(history)
-        self._history_dirty = False
-
-    async def _async_save_history(self) -> None:
-        """Persist the rolling history so restarts keep accurate rates."""
-
-        if not self._history_loaded or not self._history_dirty:
-            return
-
-        if self._last_history_persist is not None:
-            if monotonic() - self._last_history_persist < 30:
-                return
-
-        payload = {
-            STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history],
-        }
-
-        try:
-            await self._history_store.async_save(payload)
-            self._history_dirty = False
-            self._last_history_persist = monotonic()
-        except Exception as err:
-            _LOGGER.debug("[%s] Failed to save history: %s", self._name, err)
 
     def _zero_data(self) -> dict[str, Any]:
         return {

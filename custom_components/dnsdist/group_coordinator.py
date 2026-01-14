@@ -20,15 +20,14 @@ from .const import (
     ATTR_REQ_PER_HOUR,
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
-    STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
-from .utils import coerce_int, compute_window_total, slugify_rule
+from .utils import HistoryMixin, coerce_int, compute_window_total, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
     """Aggregate multiple dnsdist server coordinators into one logical group."""
 
     def __init__(
@@ -210,69 +209,6 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             _LOGGER.warning("[%s] Aggregation error: %s", self._name, err)
             return self._last_data
-
-    async def _async_ensure_history_loaded(self) -> None:
-        """Load persisted group history so restart keeps rolling windows."""
-
-        if self._history_loaded:
-            return
-
-        self._history_loaded = True
-
-        try:
-            stored = await self._history_store.async_load()
-        except Exception as err:
-            _LOGGER.debug("[%s] Failed to load group history: %s", self._name, err)
-            return
-
-        if not isinstance(stored, dict):
-            return
-
-        entries = stored.get(STORAGE_KEY_HISTORY)
-        if not isinstance(entries, list):
-            return
-
-        cutoff = time.time() - 86400
-        history: list[tuple[float, int]] = []
-
-        for item in entries:
-            if not isinstance(item, (list, tuple)) or len(item) != 2:
-                continue
-            ts_raw, val_raw = item
-            try:
-                ts = float(ts_raw)
-                queries = int(val_raw)
-            except (TypeError, ValueError):
-                continue
-            if ts < cutoff:
-                continue
-            history.append((ts, queries))
-
-        if history:
-            history.sort(key=lambda x: x[0])
-            self._history = deque(history)
-        self._history_dirty = False
-
-    async def _async_save_history(self) -> None:
-        """Persist the aggregated history for restart continuity."""
-
-        if not self._history_loaded or not self._history_dirty:
-            return
-
-        if self._last_history_persist is not None:
-            if time.monotonic() - self._last_history_persist < 30:
-                return
-
-        payload = {
-            STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history],
-        }
-
-        try:
-            await self._history_store.async_save(payload)
-            self._history_dirty = False
-            self._last_history_persist = time.monotonic()
-        except Exception as err:
-            _LOGGER.debug("[%s] Failed to save group history: %s", self._name, err)
 
     def _zero_data(self) -> dict[str, Any]:
         """Provide a valid zeroed dataset so sensors stay available."""
