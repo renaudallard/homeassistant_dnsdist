@@ -17,6 +17,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
+
 from .const import (
     CONF_API_KEY,
     CONF_UPDATE_INTERVAL,
@@ -461,7 +463,7 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _slugify_rule(self, value: Any) -> str:
         base = str(value or "").lower()
-        base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+        base = _SLUG_PATTERN.sub("-", base).strip("-")
         if not base:
             base = f"rule-{abs(hash(value)) & 0xFFFF:x}"
         return base

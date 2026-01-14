@@ -16,6 +16,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
+_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
+
 from .const import (
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
@@ -343,14 +345,14 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _slugify(self, value: Any) -> str:
         base = str(value or "").lower()
-        base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+        base = _SLUG_PATTERN.sub("-", base).strip("-")
         if not base:
             base = "group"
         return base
 
     def _slugify_rule_name(self, value: Any) -> str:
         base = str(value or "").lower()
-        base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+        base = _SLUG_PATTERN.sub("-", base).strip("-")
         if not base:
             base = f"rule-{abs(hash(value)) & 0xFFFF:x}"
         return base
