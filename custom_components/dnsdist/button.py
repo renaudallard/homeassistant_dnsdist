@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable
+from typing import Any, AsyncIterator
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
@@ -56,7 +56,7 @@ class DnsdistActionButton(CoordinatorEntity, ButtonEntity):
             info["configuration_url"] = f"{proto}://{self.coordinator._host}:{self.coordinator._port}"
         return info
 
-    async def _targets(self) -> Iterable[str | None]:
+    async def _targets(self) -> AsyncIterator[str | None]:
         if self._is_group and self._members:
             for m in self._members:
                 yield m
