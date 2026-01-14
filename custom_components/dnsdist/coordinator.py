@@ -10,6 +10,8 @@ from collections import deque
 from datetime import timedelta
 from typing import Any, Deque, Tuple
 
+import aiohttp
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
@@ -237,7 +239,9 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
 
         return normalized
 
-    async def _async_fetch_filtering_rules(self, session, headers) -> dict[str, dict[str, Any]] | None:
+    async def _async_fetch_filtering_rules(
+        self, session: aiohttp.ClientSession, headers: dict[str, str]
+    ) -> dict[str, dict[str, Any]] | None:
         """Fetch filtering rules and normalize them into a mapping."""
 
         if self._filtering_rules_supported is False:
