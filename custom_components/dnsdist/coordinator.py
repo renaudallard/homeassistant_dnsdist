@@ -6,7 +6,6 @@ import logging
 import time
 from collections import deque
 from datetime import timedelta
-from itertools import islice
 from asyncio import timeout
 from time import monotonic
 from typing import Any, Deque, Tuple
@@ -30,7 +29,7 @@ from .const import (
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
-from .utils import coerce_int, slugify_rule
+from .utils import coerce_int, compute_window_total, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -154,50 +153,9 @@ class DnsdistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if history_changed:
                 self._history_dirty = True
 
-            # Helper to compute total requests over the trailing window without
-            # normalizing the value to a full period. This ensures the reported
-            # rate reflects the actual volume observed in the rolling window
-            # instead of an extrapolated value.
-            def window_total(window_seconds: int, current_total: int) -> int:
-                """Return observed requests inside the trailing window."""
-
-                if not self._history:
-                    return 0
-
-                horizon = now_ts - window_seconds
-                prev_ts, prev_q = self._history[0]
-                baseline = float(prev_q)
-
-                if prev_ts < horizon:
-                    for ts, qq in islice(self._history, 1, None):
-                        if ts < horizon:
-                            prev_ts, prev_q = ts, qq
-                            continue
-
-                        if ts == horizon:
-                            baseline = float(qq)
-                        else:
-                            span = ts - prev_ts
-                            if span > 0:
-                                fraction = (horizon - prev_ts) / span
-                                fraction = max(0.0, min(1.0, fraction))
-                                baseline = float(prev_q) + (qq - prev_q) * fraction
-                            else:
-                                baseline = float(prev_q)
-                        break
-                    else:
-                        baseline = float(self._history[-1][1])
-                else:
-                    baseline = float(prev_q)
-
-                delta = current_total - int(baseline)
-                return max(0, delta)
-
-            reqph = window_total(3600, q)      # requests observed in the last hour
-            reqpd = window_total(86400, q)     # requests observed in the last 24 hours
-
-            normalized[ATTR_REQ_PER_HOUR] = reqph
-            normalized[ATTR_REQ_PER_DAY] = reqpd
+            # Compute requests observed in trailing windows
+            normalized[ATTR_REQ_PER_HOUR] = compute_window_total(self._history, now_ts, 3600, q)
+            normalized[ATTR_REQ_PER_DAY] = compute_window_total(self._history, now_ts, 86400, q)
 
             # Keep small debug attributes if useful
             # normalized["rate_windows"] = {"hour_elapsed_s": int(elapsed1), "day_elapsed_s": int(elapsed2)}

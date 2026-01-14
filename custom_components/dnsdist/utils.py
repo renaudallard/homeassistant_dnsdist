@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from itertools import islice
 from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -83,3 +85,56 @@ def build_device_info(coordinator, is_group: bool) -> DeviceInfo:
         info["configuration_url"] = f"{proto}://{coordinator._host}:{coordinator._port}"
 
     return info
+
+
+def compute_window_total(
+    history: Sequence[tuple[float, int]],
+    now_ts: float,
+    window_seconds: int,
+    current_total: int,
+) -> int:
+    """Compute total requests observed in a trailing time window.
+
+    Uses linear interpolation to estimate the baseline value at the
+    window boundary when no exact sample exists at that time.
+
+    Args:
+        history: Sequence of (timestamp, query_count) tuples, ordered by time.
+        now_ts: Current timestamp.
+        window_seconds: Size of the trailing window in seconds.
+        current_total: Current total query count.
+
+    Returns:
+        Number of requests observed within the window (non-negative).
+    """
+    if not history:
+        return 0
+
+    horizon = now_ts - window_seconds
+    prev_ts, prev_q = history[0]
+    baseline = float(prev_q)
+
+    if prev_ts < horizon:
+        for ts, qq in islice(history, 1, None):
+            if ts < horizon:
+                prev_ts, prev_q = ts, qq
+                continue
+
+            if ts == horizon:
+                baseline = float(qq)
+            else:
+                span = ts - prev_ts
+                if span > 0:
+                    fraction = (horizon - prev_ts) / span
+                    fraction = max(0.0, min(1.0, fraction))
+                    baseline = float(prev_q) + (qq - prev_q) * fraction
+                else:
+                    baseline = float(prev_q)
+            break
+        else:
+            baseline = float(history[-1][1])
+    else:
+        baseline = float(prev_q)
+
+    delta = current_total - int(baseline)
+    return max(0, delta)

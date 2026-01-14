@@ -7,7 +7,6 @@ import logging
 import time
 from collections import deque
 from datetime import timedelta
-from itertools import islice
 from typing import Any, Deque, Tuple
 
 from homeassistant.helpers.storage import Store
@@ -24,7 +23,7 @@ from .const import (
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
-from .utils import coerce_int, slugify, slugify_rule
+from .utils import coerce_int, compute_window_total, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -196,43 +195,9 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if history_changed:
                     self._history_dirty = True
 
-                def window_total(window_seconds: int, current_total: int) -> int:
-                    """Return observed requests for the trailing window."""
-
-                    if not self._history:
-                        return 0
-
-                    horizon = now_ts - window_seconds
-                    prev_ts, prev_q = self._history[0]
-                    baseline = float(prev_q)
-
-                    if prev_ts < horizon:
-                        for ts, qq in islice(self._history, 1, None):
-                            if ts < horizon:
-                                prev_ts, prev_q = ts, qq
-                                continue
-
-                            if ts == horizon:
-                                baseline = float(qq)
-                            else:
-                                span = ts - prev_ts
-                                if span > 0:
-                                    fraction = (horizon - prev_ts) / span
-                                    fraction = max(0.0, min(1.0, fraction))
-                                    baseline = float(prev_q) + (qq - prev_q) * fraction
-                                else:
-                                    baseline = float(prev_q)
-                            break
-                        else:
-                            baseline = float(self._history[-1][1])
-                    else:
-                        baseline = float(prev_q)
-
-                    delta = current_total - int(baseline)
-                    return max(0, delta)
-
-                aggregated[ATTR_REQ_PER_HOUR] = window_total(3600, q_total)
-                aggregated[ATTR_REQ_PER_DAY] = window_total(86400, q_total)
+                # Compute requests observed in trailing windows
+                aggregated[ATTR_REQ_PER_HOUR] = compute_window_total(self._history, now_ts, 3600, q_total)
+                aggregated[ATTR_REQ_PER_DAY] = compute_window_total(self._history, now_ts, 86400, q_total)
             except Exception as err:
                 _LOGGER.debug("[%s] Group rate computation failed: %s", self._name, err)
 
