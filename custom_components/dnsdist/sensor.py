@@ -152,11 +152,7 @@ class DnsdistSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the current value."""
-        val = None
-        try:
-            val = self.coordinator.data.get(self._key) if self.coordinator.data else None
-        except Exception:
-            return None
+        val = self.coordinator.data.get(self._key) if self.coordinator.data else None
 
         if self._key == "uptime" and isinstance(val, (int, float)):
             return int(val)
