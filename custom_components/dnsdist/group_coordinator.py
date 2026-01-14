@@ -188,7 +188,6 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 history_changed = False
                 if self._history and q_total < self._history[-1][1]:
                     self._history.clear()
-                    history_changed = True
                 self._history.append((now_ts, q_total))
                 history_changed = True
                 cutoff_24h = now_ts - 86400
