@@ -190,6 +190,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_add_hub(self, user_input: dict[str, Any] | None = None):
         """Add a single dnsdist host."""
+        _LOGGER.debug("async_step_add_hub called with user_input: %s", user_input)
         errors: dict[str, str] = {}
 
         # Keys expected in this step's form
@@ -201,7 +202,11 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Filter out any keys from previous steps (e.g., 'mode' from async_step_user)
         if user_input is not None:
+            original_keys = set(user_input.keys())
             user_input = {k: v for k, v in user_input.items() if k in expected_keys}
+            filtered_keys = original_keys - set(user_input.keys())
+            if filtered_keys:
+                _LOGGER.debug("Filtered out unexpected keys: %s", filtered_keys)
 
         schema = vol.Schema(
             {
@@ -219,17 +224,26 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not user_input:
             return self.async_show_form(step_id="add_hub", data_schema=schema)
 
+        # Validate required fields are present
+        if CONF_NAME not in user_input or CONF_HOST not in user_input:
+            _LOGGER.debug("Missing required fields in user_input: %s", user_input.keys())
+            return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
+
         name = user_input[CONF_NAME]
         host = user_input[CONF_HOST]
-        port = user_input[CONF_PORT]
+        port = user_input.get(CONF_PORT, 8083)
         api_key = user_input.get(CONF_API_KEY, "") or None
         use_https = user_input.get(CONF_USE_HTTPS, False)
         verify_ssl = user_input.get(CONF_VERIFY_SSL, True)
         update_interval = user_input.get(CONF_UPDATE_INTERVAL, 30)
         include_filter_sensors = bool(user_input.get(CONF_INCLUDE_FILTER_SENSORS, False))
 
-        valid = await _validate_connection(self.hass, host, port, api_key, use_https, verify_ssl)
-        if not valid:
+        try:
+            valid = await _validate_connection(self.hass, host, port, api_key, use_https, verify_ssl)
+            if not valid:
+                errors["base"] = "cannot_connect"
+        except Exception as err:
+            _LOGGER.exception("Connection validation failed: %s", err)
             errors["base"] = "cannot_connect"
 
         if errors:
