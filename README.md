@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.1.14-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.1.15-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -34,7 +34,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.1.14** |
+| **Current version** | **1.1.15** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -202,6 +202,7 @@ custom_components/dnsdist/
   __init__.py
   manifest.json
   const.py
+  utils.py
   config_flow.py
   options_flow.py
   coordinator.py
@@ -219,6 +220,15 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.1.15
+- Refactor codebase to eliminate code duplication across coordinator modules.
+- Extract shared utilities into `utils.py`: slugify functions, type coercion, device info builder, and rolling window computation.
+- Create `HistoryMixin` for shared history persistence logic between host and group coordinators.
+- Centralize security status mappings in `const.py`.
+- Fix async generator type annotation in button.py.
+- Remove redundant history flag assignments in coordinator logic.
+- Pre-compile regex patterns for improved performance.
 
 ### 1.1.14
 - Remove deprecated HACS metadata (`country`) to match the current HACS specification.
