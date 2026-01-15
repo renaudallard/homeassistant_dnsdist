@@ -38,8 +38,10 @@ async def _call_dnsdist_api(
     session = async_get_clientsession(coordinator.hass)
 
     try:
+        verify_ssl = getattr(coordinator, "_verify_ssl", True)
+        ssl_context = False if not verify_ssl else None
         async with session.request(
-            method, url, headers=headers, ssl=getattr(coordinator, "_verify_ssl", True), json=json_data
+            method, url, headers=headers, ssl=ssl_context, json=json_data
         ) as resp:
             text = await resp.text()
             if resp.status in (200, 204):

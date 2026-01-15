@@ -88,11 +88,21 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         session = async_get_clientsession(self.hass)
 
         try:
+            ssl_context = False if not self._verify_ssl else None
+            _LOGGER.debug("[%s] Requesting stats from %s (ssl=%s)", self._name, url, ssl_context)
             async with timeout(10):
-                async with session.get(url, headers=headers, ssl=self._verify_ssl) as resp:
+                async with session.get(url, headers=headers, ssl=ssl_context) as resp:
                     if resp.status != 200:
                         raise ConnectionError(f"HTTP {resp.status}")
                     stats = await resp.json()
+        except aiohttp.ClientSSLError as err:
+            _LOGGER.warning("[%s] SSL error: %s", self._name, err)
+            data = dict(self.data or self._zero_data())
+            return data
+        except aiohttp.ClientConnectorError as err:
+            _LOGGER.warning("[%s] Connection failed: %s", self._name, err)
+            data = dict(self.data or self._zero_data())
+            return data
         except Exception as err:
             _LOGGER.warning("[%s] Fetch error: %s", self._name, err)
             # Preserve last data to avoid sensor going unavailable
@@ -246,8 +256,10 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         payload: Any | None = None
 
         try:
+            ssl_context = False if not self._verify_ssl else None
+            _LOGGER.debug("[%s] Requesting filtering rules from %s (ssl=%s)", self._name, url, ssl_context)
             async with timeout(10):
-                async with session.get(url, headers=headers, ssl=self._verify_ssl) as resp:
+                async with session.get(url, headers=headers, ssl=ssl_context) as resp:
                     if resp.status == 404:
                         if self._filtering_rules_supported is not False:
                             _LOGGER.debug(

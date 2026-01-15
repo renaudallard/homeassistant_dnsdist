@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import aiohttp
 from asyncio import timeout, TimeoutError as AsyncTimeoutError
 from typing import Any
 
@@ -107,8 +108,10 @@ async def _validate_connection(
     session = async_get_clientsession(hass)
 
     try:
+        ssl_context = False if not verify_ssl else None
+        _LOGGER.debug("Requesting stats from %s (ssl=%s)", url, ssl_context)
         async with timeout(5):
-            async with session.get(url, headers=headers, ssl=verify_ssl) as resp:
+            async with session.get(url, headers=headers, ssl=ssl_context) as resp:
                 if resp.status != 200:
                     _LOGGER.warning("dnsdist API returned HTTP %s for %s:%s", resp.status, host, port)
                     return False
@@ -167,6 +170,12 @@ async def _validate_connection(
 
     except AsyncTimeoutError:
         _LOGGER.error("dnsdist connection timeout for %s:%s", host, port)
+        return False
+    except aiohttp.ClientSSLError as err:
+        _LOGGER.error("dnsdist SSL error for %s:%s: %s", host, port, err)
+        return False
+    except aiohttp.ClientConnectorError as err:
+        _LOGGER.error("dnsdist connection failed for %s:%s: %s", host, port, err)
         return False
     except Exception as err:
         _LOGGER.error("dnsdist connection error for %s:%s: %s", host, port, err)
