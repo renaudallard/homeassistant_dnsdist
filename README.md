@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.1.18-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.2.0-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -20,14 +20,15 @@
 3. [Installation](#installation)
 4. [Configuration](#configuration)
 5. [Entities](#entities)
-6. [Options](#options)
-7. [Services](#services)
-8. [Device Buttons](#device-buttons)
-9. [Diagnostics](#diagnostics)
-10. [Troubleshooting](#troubleshooting)
-11. [File Map](#file-map)
-12. [Changelog](#changelog)
-13. [License](#license)
+6. [Lovelace Card](#lovelace-card)
+7. [Options](#options)
+8. [Services](#services)
+9. [Device Buttons](#device-buttons)
+10. [Diagnostics](#diagnostics)
+11. [Troubleshooting](#troubleshooting)
+12. [File Map](#file-map)
+13. [Changelog](#changelog)
+14. [License](#license)
 
 ---
 
@@ -37,7 +38,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.1.18** |
+| **Current version** | **1.2.0** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -53,6 +54,7 @@
   - **Average:** CPU %
   - **Max:** uptime
 - **Filtering rule sensors** for per-rule match counts (opt-in for hosts, on by default for groups) complete with idle/active icons.
+- **Custom Lovelace card** (`dnsdist-card`) for a beautiful dashboard display with gauges, counters, and filtering rules.
 - **Long-term statistics ready** sensors:
   - Monotonic counters as `TOTAL_INCREASING` (`count` unit)
   - `cacheHit` and `cpu` as `%` (`MEASUREMENT`)
@@ -118,7 +120,59 @@ Each host or group creates a Home Assistant device with these sensors:
 - `security_status` — string with `status_code` (0–3) and `status_label`
 - **Filtering rule sensors** (`Filter <rule name>`) — per-rule matches for hosts, aggregated counts plus a `sources` attribute for groups. Icons flip between `mdi:filter-check-outline` (idle) and `mdi:filter` (active).
 
-> Sensor entity names are metric-only. Home Assistant automatically prefixes them with the device name (e.g., “elrond Cache Hit Rate”).
+> Sensor entity names are metric-only. Home Assistant automatically prefixes them with the device name (e.g., "elrond Cache Hit Rate").
+
+---
+
+## 🎨 Lovelace Card <a id="lovelace-card"></a>
+
+The integration includes a custom Lovelace card for displaying dnsdist metrics in a visually appealing dashboard layout.
+
+### Features
+
+- **Header** with title and security status badge (OK/Warning/Critical color-coded)
+- **Gauges** for CPU usage and Cache Hit Rate with visual arcs
+- **Uptime display** in human-readable format
+- **Traffic counters** grid: Queries, Responses, Drops, Rule Drops, Errors
+- **Request rates** tiles: Per Hour and Per Day
+- **Filtering rules** list sorted by match count with expandable details
+- **Clear Cache** button with confirmation dialog
+- **Theme support** respects Home Assistant light/dark mode
+- **Compact mode** for sidebar placement
+
+### Installation
+
+The card is automatically registered when the integration loads. If needed, you can manually add the resource:
+
+1. Go to **Settings → Dashboards → Resources**
+2. Add `/dnsdist_static/dnsdist-card.js?v=1.2.0` as a JavaScript Module
+
+### Usage
+
+Add the card to your dashboard via the UI card picker (search for "dnsdist") or manually:
+
+```yaml
+type: custom:dnsdist-card
+entity_prefix: dns1              # Required: matches your dnsdist device name
+title: My DNS Server             # Optional: custom card title
+show_filters: true               # Optional: show filtering rules section (default: true)
+show_actions: true               # Optional: show action buttons (default: true)
+compact: false                   # Optional: compact mode for sidebars (default: false)
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `entity_prefix` | string | *required* | The device name prefix used for entity IDs (e.g., `dns1` for `sensor.dns1_total_queries`) |
+| `title` | string | entity_prefix | Custom title displayed in the card header |
+| `show_filters` | boolean | `true` | Show the filtering rules section |
+| `show_actions` | boolean | `true` | Show action buttons (Clear Cache) |
+| `compact` | boolean | `false` | Use smaller sizes for sidebar placement |
+
+### Visual Editor
+
+The card includes a visual configuration editor accessible through the Lovelace UI. It automatically detects available dnsdist devices and provides toggles for all options.
 
 ---
 
@@ -218,11 +272,35 @@ custom_components/dnsdist/
   translations/
     en.json
   services.yaml
+  frontend/                    # Lovelace card source
+    package.json
+    tsconfig.json
+    rollup.config.mjs
+    src/
+      dnsdist-card.ts          # Main card component
+      dnsdist-card-editor.ts   # Visual config editor
+      styles.ts                # CSS styles
+      types.ts                 # TypeScript interfaces
+  www/
+    dnsdist-card.js            # Built card bundle
 ```
 
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.2.0
+- Add custom Lovelace card (`dnsdist-card`) for dashboard display.
+  - Visual gauges for CPU and Cache Hit Rate
+  - Traffic counters grid with formatted numbers
+  - Request rate tiles (per hour/day)
+  - Dynamic filtering rules list sorted by match count
+  - Expandable rule details with pattern, type, and status
+  - Clear Cache button with confirmation dialog
+  - Visual config editor with device auto-detection
+  - Compact mode for sidebar placement
+  - Full theme support (light/dark mode)
+- Auto-register frontend resource on integration load.
 
 ### 1.1.18
 - Fix SSL verification logic to correctly skip validation when disabled.

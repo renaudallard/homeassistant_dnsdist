@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant, CoreState, callback
+from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_call_later
+from homeassistant.components.http import StaticPathConfig
 
 from .const import (
     DOMAIN,
@@ -40,10 +43,125 @@ _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
+FRONTEND_URL_BASE = "/dnsdist_static"
+FRONTEND_CARD_FILENAME = "dnsdist-card.js"
+
+
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Initial setup for the dnsdist integration."""
     hass.data.setdefault(DOMAIN, {})
+
+    # Register frontend after HA is fully started
+    async def _setup_frontend(_event: Any = None) -> None:
+        await _async_register_frontend(hass)
+
+    if hass.state == CoreState.running:
+        await _setup_frontend()
+    else:
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _setup_frontend)
+
     return True
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Register the dnsdist Lovelace card as a frontend resource."""
+    www_path = Path(__file__).parent / "www"
+    card_path = www_path / FRONTEND_CARD_FILENAME
+
+    if not card_path.exists():
+        _LOGGER.warning(
+            "[dnsdist] Frontend card not found at %s, card will not be available",
+            card_path,
+        )
+        return
+
+    # Register static path for serving files from www/
+    try:
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(FRONTEND_URL_BASE, str(www_path), cache_headers=False)]
+        )
+        _LOGGER.debug("[dnsdist] Registered static path: %s -> %s", FRONTEND_URL_BASE, www_path)
+    except RuntimeError:
+        _LOGGER.debug("[dnsdist] Static path already registered: %s", FRONTEND_URL_BASE)
+
+    # Register as Lovelace resource
+    lovelace = hass.data.get("lovelace")
+    if lovelace is None:
+        _LOGGER.warning("[dnsdist] Lovelace not available, cannot register card resource")
+        return
+
+    if lovelace.mode != "storage":
+        _LOGGER.info(
+            "[dnsdist] Lovelace in YAML mode. Add resource manually: "
+            "url: %s/%s, type: module",
+            FRONTEND_URL_BASE,
+            FRONTEND_CARD_FILENAME,
+        )
+        return
+
+    # Wait for lovelace resources to be loaded
+    await _async_register_lovelace_module(hass, lovelace)
+
+
+async def _async_register_lovelace_module(hass: HomeAssistant, lovelace: Any) -> None:
+    """Register the card module in Lovelace resources."""
+    from homeassistant.loader import async_get_integration
+
+    # Get integration version for cache busting
+    try:
+        integration = await async_get_integration(hass, DOMAIN)
+        version = integration.version
+    except Exception:
+        version = "1.2.0"
+
+    url_with_version = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}?v={version}"
+    url_base = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}"
+
+    @callback
+    def _check_resources_loaded(_now: Any = None) -> None:
+        """Check if resources are loaded and register."""
+        if not lovelace.resources.loaded:
+            _LOGGER.debug("[dnsdist] Lovelace resources not loaded yet, retrying...")
+            async_call_later(hass, 5, _check_resources_loaded)
+            return
+
+        hass.async_create_task(_do_register_module(lovelace, url_base, url_with_version))
+
+    _check_resources_loaded()
+
+
+async def _do_register_module(lovelace: Any, url_base: str, url_with_version: str) -> None:
+    """Actually register or update the module."""
+    try:
+        # Check existing resources
+        for resource in lovelace.resources.async_items():
+            existing_url = resource.get("url", "")
+            # Check if our resource exists (with or without version)
+            if existing_url.split("?")[0] == url_base:
+                # Already registered, check if version update needed
+                if existing_url != url_with_version:
+                    _LOGGER.info("[dnsdist] Updating dnsdist-card to new version")
+                    await lovelace.resources.async_update_item(
+                        resource["id"],
+                        {"res_type": "module", "url": url_with_version},
+                    )
+                else:
+                    _LOGGER.debug("[dnsdist] dnsdist-card already registered")
+                return
+
+        # Not registered, create new
+        await lovelace.resources.async_create_item(
+            {"res_type": "module", "url": url_with_version}
+        )
+        _LOGGER.info("[dnsdist] Registered dnsdist-card as Lovelace resource")
+
+    except Exception as err:
+        _LOGGER.warning(
+            "[dnsdist] Could not register Lovelace resource: %s. "
+            "Add manually: Settings > Dashboards > Resources > Add '%s' as JavaScript Module",
+            err,
+            url_with_version,
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

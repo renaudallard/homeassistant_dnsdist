@@ -1,14 +1,15 @@
 {
   "domain": "dnsdist",
   "name": "PowerDNS dnsdist",
-  "after_dependencies": [
-    "http"
-  ],
   "codeowners": [
     "@renaudallard"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "frontend",
+    "http",
+    "lovelace"
+  ],
   "documentation": "https://github.com/renaudallard/homeassistant_dnsdist",
   "integration_type": "hub",
   "iot_class": "local_polling",
@@ -17,5 +18,5 @@
     "custom_components.dnsdist"
   ],
   "requirements": [],
-  "version": "1.1.18"
+  "version": "1.2.0"
 }
