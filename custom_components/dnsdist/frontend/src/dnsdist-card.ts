@@ -294,19 +294,52 @@ export class DnsdistCard extends LitElement {
     this._confirmAction = null;
   }
 
-  private _renderGauge(value: number | null, label: string, color?: string) {
+  private _renderGaugeGreenToRed(value: number | null, label: string) {
     const pct = value !== null ? Math.min(100, Math.max(0, value)) : 0;
-    const rotation = 225 + (pct / 100) * 270;
+    const needleRotation = -135 + (pct / 100) * 270;
 
     return html`
       <div class="gauge">
-        <div class="gauge-arc">
-          <div class="gauge-arc-bg"></div>
-          <div
-            class="gauge-arc-fill"
-            style="transform: rotate(${rotation}deg); ${color ? `border-color: ${color}; border-bottom-color: transparent; border-left-color: transparent;` : ''}"
-          ></div>
-        </div>
+        <svg class="gauge-svg" viewBox="0 0 100 100">
+          <path d="M 21.72 78.28 A 40 40 0 0 1 10.77 57.80" fill="none" stroke="#4caf50" stroke-width="8"/>
+          <path d="M 10.77 57.80 A 40 40 0 0 1 13.04 34.69" fill="none" stroke="#8bc34a" stroke-width="8"/>
+          <path d="M 13.04 34.69 A 40 40 0 0 1 27.78 16.74" fill="none" stroke="#cddc39" stroke-width="8"/>
+          <path d="M 27.78 16.74 A 40 40 0 0 1 50.00 10.00" fill="none" stroke="#ffeb3b" stroke-width="8"/>
+          <path d="M 50.00 10.00 A 40 40 0 0 1 72.22 16.74" fill="none" stroke="#ffc107" stroke-width="8"/>
+          <path d="M 72.22 16.74 A 40 40 0 0 1 86.96 34.69" fill="none" stroke="#ff9800" stroke-width="8"/>
+          <path d="M 86.96 34.69 A 40 40 0 0 1 89.23 57.80" fill="none" stroke="#ff5722" stroke-width="8"/>
+          <path d="M 89.23 57.80 A 40 40 0 0 1 78.28 78.28" fill="none" stroke="#f44336" stroke-width="8"/>
+          <g class="gauge-needle-group" style="transform: rotate(${needleRotation}deg); transform-origin: 50px 50px;">
+            <line class="gauge-needle" x1="50" y1="50" x2="50" y2="16" />
+          </g>
+          <circle class="gauge-pivot" cx="50" cy="50" r="4" />
+        </svg>
+        <div class="gauge-value">${value !== null ? `${value.toFixed(0)}%` : '-'}</div>
+        <div class="gauge-label">${label}</div>
+      </div>
+    `;
+  }
+
+  private _renderGaugeRedToGreen(value: number | null, label: string) {
+    const pct = value !== null ? Math.min(100, Math.max(0, value)) : 0;
+    const needleRotation = -135 + (pct / 100) * 270;
+
+    return html`
+      <div class="gauge">
+        <svg class="gauge-svg" viewBox="0 0 100 100">
+          <path d="M 21.72 78.28 A 40 40 0 0 1 10.77 57.80" fill="none" stroke="#f44336" stroke-width="8"/>
+          <path d="M 10.77 57.80 A 40 40 0 0 1 13.04 34.69" fill="none" stroke="#ff5722" stroke-width="8"/>
+          <path d="M 13.04 34.69 A 40 40 0 0 1 27.78 16.74" fill="none" stroke="#ff9800" stroke-width="8"/>
+          <path d="M 27.78 16.74 A 40 40 0 0 1 50.00 10.00" fill="none" stroke="#ffc107" stroke-width="8"/>
+          <path d="M 50.00 10.00 A 40 40 0 0 1 72.22 16.74" fill="none" stroke="#ffeb3b" stroke-width="8"/>
+          <path d="M 72.22 16.74 A 40 40 0 0 1 86.96 34.69" fill="none" stroke="#cddc39" stroke-width="8"/>
+          <path d="M 86.96 34.69 A 40 40 0 0 1 89.23 57.80" fill="none" stroke="#8bc34a" stroke-width="8"/>
+          <path d="M 89.23 57.80 A 40 40 0 0 1 78.28 78.28" fill="none" stroke="#4caf50" stroke-width="8"/>
+          <g class="gauge-needle-group" style="transform: rotate(${needleRotation}deg); transform-origin: 50px 50px;">
+            <line class="gauge-needle" x1="50" y1="50" x2="50" y2="16" />
+          </g>
+          <circle class="gauge-pivot" cx="50" cy="50" r="4" />
+        </svg>
         <div class="gauge-value">${value !== null ? `${value.toFixed(0)}%` : '-'}</div>
         <div class="gauge-label">${label}</div>
       </div>
@@ -441,8 +474,8 @@ export class DnsdistCard extends LitElement {
 
         <!-- Gauges -->
         <div class="gauge-container">
-          ${this._renderGauge(cpu, 'CPU')}
-          ${this._renderGauge(cacheHit, 'Cache Hit')}
+          ${this._renderGaugeGreenToRed(cpu, 'CPU')}
+          ${this._renderGaugeRedToGreen(cacheHit, 'Cache Hit')}
         </div>
 
         <!-- Uptime -->

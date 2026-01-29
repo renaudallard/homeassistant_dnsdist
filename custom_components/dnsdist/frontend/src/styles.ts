@@ -122,43 +122,33 @@ export const cardStyles = css`
   .gauge {
     position: relative;
     width: 100px;
-    height: 80px;
     display: flex;
     flex-direction: column;
     align-items: center;
   }
 
-  .gauge-arc {
-    position: relative;
+  .gauge-svg {
     width: 100px;
-    height: 50px;
-    overflow: hidden;
+    height: 90px;
+    overflow: visible;
   }
 
-  .gauge-arc-bg {
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    border: 8px solid var(--dnsdist-divider);
-    border-bottom-color: transparent;
-    border-left-color: transparent;
-    transform: rotate(225deg);
-    box-sizing: border-box;
+  .gauge-arc-path {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
   }
 
-  .gauge-arc-fill {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    border: 8px solid var(--dnsdist-accent);
-    border-bottom-color: transparent;
-    border-left-color: transparent;
-    transform: rotate(225deg);
-    box-sizing: border-box;
-    transition: transform 0.3s ease;
+  .gauge-needle-group {
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .gauge-needle {
+    stroke: var(--dnsdist-primary-text, #212121);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+  }
+
+  .gauge-pivot {
+    fill: var(--dnsdist-primary-text, #212121);
   }
 
   .gauge-value {
@@ -366,15 +356,9 @@ export const cardStyles = css`
     width: 80px;
   }
 
-  :host([compact]) .gauge-arc,
-  :host([compact]) .gauge-arc-bg,
-  :host([compact]) .gauge-arc-fill {
+  :host([compact]) .gauge-svg {
     width: 80px;
-    height: 80px;
-  }
-
-  :host([compact]) .gauge-arc {
-    height: 40px;
+    height: 72px;
   }
 
   :host([compact]) .stat-tile {

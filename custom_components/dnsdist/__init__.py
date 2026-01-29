@@ -112,7 +112,7 @@ async def _async_register_lovelace_module(hass: HomeAssistant, lovelace: Any) ->
         integration = await async_get_integration(hass, DOMAIN)
         version = integration.version
     except Exception:
-        version = "1.2.0"
+        version = "1.2.1"
 
     url_with_version = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}?v={version}"
     url_base = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}"
