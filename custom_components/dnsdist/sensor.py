@@ -14,6 +14,7 @@ from homeassistant.const import UnitOfTime, PERCENTAGE
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     ATTR_DYNAMIC_RULES,
@@ -138,6 +139,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
             # Remove entities for expired dynblocks
             expired_slugs = known_slugs - current_slugs
+            ent_reg = er.async_get(hass)
             for slug in expired_slugs:
                 entity = dynamic_entities.pop(slug, None)
                 if entity:
@@ -146,7 +148,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         getattr(coordinator, "_name", "dnsdist"),
                         slug,
                     )
-                    hass.async_create_task(entity.async_remove())
+                    # Remove from entity registry to prevent restoration after restart
+                    if entity.entity_id and ent_reg.async_get(entity.entity_id):
+                        ent_reg.async_remove(entity.entity_id)
+                    else:
+                        hass.async_create_task(entity.async_remove())
 
             # Add new entities
             new_entities: list[DnsdistDynamicRuleSensor] = []

@@ -348,7 +348,7 @@ export class DnsdistCard extends LitElement {
 
       const rule: DynamicRule = {
         blocks: isNaN(blocks) ? 0 : blocks,
-        network: entity.attributes?.network as string | undefined,
+        network: network,
         reason: entity.attributes?.reason as string | undefined,
         action: entity.attributes?.action as string | undefined,
         seconds: seconds,
