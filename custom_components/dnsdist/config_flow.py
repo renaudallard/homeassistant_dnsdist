@@ -336,4 +336,4 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         """Return the options flow handler."""
         from .options_flow import DnsdistOptionsFlowHandler  # lazy import
-        return DnsdistOptionsFlowHandler(config_entry)
+        return DnsdistOptionsFlowHandler()

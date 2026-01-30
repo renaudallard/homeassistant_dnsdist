@@ -28,10 +28,6 @@ _LOGGER = logging.getLogger(__name__)
 class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle dnsdist options."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize dnsdist options flow."""
-        self.config_entry = config_entry
-
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Manage the options."""
         data = self.config_entry.data
@@ -163,4 +159,4 @@ def _remove_filtering_rule_entities(hass, entry_id: str) -> None:
 @callback
 def async_get_options_flow(config_entry: config_entries.ConfigEntry):
     """Return the options flow handler."""
-    return DnsdistOptionsFlowHandler(config_entry)
+    return DnsdistOptionsFlowHandler()
