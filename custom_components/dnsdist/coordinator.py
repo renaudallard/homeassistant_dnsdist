@@ -175,7 +175,22 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
 
             # Compute requests observed in trailing windows
             normalized[ATTR_REQ_PER_HOUR] = compute_window_total(self._history, now_ts, 3600, q)
-            normalized[ATTR_REQ_PER_DAY] = compute_window_total(self._history, now_ts, 86400, q)
+
+            # For daily rate, extrapolate from available history if less than 24h
+            if self._history:
+                oldest_ts = self._history[0][0]
+                history_span = now_ts - oldest_ts
+                if history_span >= 86400:
+                    # Full 24h of data available
+                    normalized[ATTR_REQ_PER_DAY] = compute_window_total(self._history, now_ts, 86400, q)
+                elif history_span > 0:
+                    # Extrapolate from available data
+                    observed = q - self._history[0][1]
+                    normalized[ATTR_REQ_PER_DAY] = int((observed / history_span) * 86400)
+                else:
+                    normalized[ATTR_REQ_PER_DAY] = 0
+            else:
+                normalized[ATTR_REQ_PER_DAY] = 0
 
             # Keep small debug attributes if useful
             # normalized["rate_windows"] = {"hour_elapsed_s": int(elapsed1), "day_elapsed_s": int(elapsed2)}

@@ -28,6 +28,7 @@ export class DnsdistCard extends LitElement {
   @state() private _config!: DnsdistCardConfig;
   @state() private _expandedFilters: Set<string> = new Set();
   @state() private _expandedDynamic: Set<string> = new Set();
+  @state() private _showZeroMatchDynamic = false;
   @state() private _showConfirm = false;
   @state() private _confirmAction: (() => void) | null = null;
 
@@ -360,8 +361,13 @@ export class DnsdistCard extends LitElement {
       rules.push({ entity, rule });
     }
 
+    // Filter out zero-match rules unless toggle is enabled
+    const filteredRules = this._showZeroMatchDynamic
+      ? rules
+      : rules.filter(({ rule }) => rule.blocks > 0);
+
     // Sort by blocks descending
-    return rules.sort((a, b) => b.rule.blocks - a.rule.blocks);
+    return filteredRules.sort((a, b) => b.rule.blocks - a.rule.blocks);
   }
 
   private _extractDynamicRuleName(entity: HassEntity): string {
@@ -451,6 +457,10 @@ export class DnsdistCard extends LitElement {
   private _hideConfirm() {
     this._showConfirm = false;
     this._confirmAction = null;
+  }
+
+  private _toggleShowZeroMatchDynamic() {
+    this._showZeroMatchDynamic = !this._showZeroMatchDynamic;
   }
 
   private _renderGaugeSvg(needleRotation: number, colors: string[]) {
@@ -765,6 +775,17 @@ export class DnsdistCard extends LitElement {
                   <ha-icon icon="mdi:database-refresh"></ha-icon>
                   Clear Cache
                 </button>
+                ${this._config.show_dynamic_rules
+                  ? html`
+                      <button
+                        class="action-button ${this._showZeroMatchDynamic ? '' : 'toggle-off'}"
+                        @click=${this._toggleShowZeroMatchDynamic}
+                      >
+                        <ha-icon icon="${this._showZeroMatchDynamic ? 'mdi:eye-off' : 'mdi:eye'}"></ha-icon>
+                        ${this._showZeroMatchDynamic ? 'Hide 0 Hits' : 'Show 0 Hits'}
+                      </button>
+                    `
+                  : nothing}
               </div>
             `
           : nothing}

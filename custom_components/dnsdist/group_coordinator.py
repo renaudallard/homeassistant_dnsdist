@@ -234,7 +234,22 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
 
                 # Compute requests observed in trailing windows
                 aggregated[ATTR_REQ_PER_HOUR] = compute_window_total(self._history, now_ts, 3600, q_total)
-                aggregated[ATTR_REQ_PER_DAY] = compute_window_total(self._history, now_ts, 86400, q_total)
+
+                # For daily rate, extrapolate from available history if less than 24h
+                if self._history:
+                    oldest_ts = self._history[0][0]
+                    history_span = now_ts - oldest_ts
+                    if history_span >= 86400:
+                        # Full 24h of data available
+                        aggregated[ATTR_REQ_PER_DAY] = compute_window_total(self._history, now_ts, 86400, q_total)
+                    elif history_span > 0:
+                        # Extrapolate from available data
+                        observed = q_total - self._history[0][1]
+                        aggregated[ATTR_REQ_PER_DAY] = int((observed / history_span) * 86400)
+                    else:
+                        aggregated[ATTR_REQ_PER_DAY] = 0
+                else:
+                    aggregated[ATTR_REQ_PER_DAY] = 0
             except Exception as err:
                 _LOGGER.debug("[%s] Group rate computation failed: %s", self._name, err)
 
