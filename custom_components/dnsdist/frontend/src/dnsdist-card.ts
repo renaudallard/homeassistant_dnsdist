@@ -6,7 +6,7 @@
 import { LitElement, html, nothing, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { cardStyles } from './styles';
-import type { DnsdistCardConfig, HomeAssistant, HassEntity, FilteringRule } from './types';
+import type { DnsdistCardConfig, HomeAssistant, HassEntity, FilteringRule, DynamicRule } from './types';
 
 // Import and register the editor
 import './dnsdist-card-editor';
@@ -27,6 +27,7 @@ export class DnsdistCard extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @state() private _config!: DnsdistCardConfig;
   @state() private _expandedFilters: Set<string> = new Set();
+  @state() private _expandedDynamic: Set<string> = new Set();
   @state() private _showConfirm = false;
   @state() private _confirmAction: (() => void) | null = null;
 
@@ -38,6 +39,7 @@ export class DnsdistCard extends LitElement {
     return {
       entity_prefix: 'dnsdist',
       show_filters: true,
+      show_dynamic_rules: true,
       show_actions: true,
     };
   }
@@ -47,6 +49,7 @@ export class DnsdistCard extends LitElement {
     this._config = {
       show_graphs: false,
       show_filters: true,
+      show_dynamic_rules: true,
       show_actions: true,
       compact: false,
       ...config,
@@ -253,6 +256,103 @@ export class DnsdistCard extends LitElement {
     this._expandedFilters = expanded;
   }
 
+  private _getDynamicRuleEntities(): Array<{ entity: HassEntity; rule: DynamicRule }> {
+    if (!this.hass?.states) return [];
+
+    const prefix = this._config.entity_prefix;
+    // Escape special regex characters in prefix
+    const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Match various dynamic rule entity patterns:
+    // - sensor.{prefix}_dynblock_{network}
+    // - sensor.{prefix}_{prefix}_dynblock_{network} (doubled prefix)
+    const dynblockPattern = new RegExp(
+      `^sensor\\.(${escapedPrefix}_)?${escapedPrefix}[_\\s]?dynblock`,
+      'i'
+    );
+
+    const rules: Array<{ entity: HassEntity; rule: DynamicRule }> = [];
+
+    for (const entityId of Object.keys(this.hass.states)) {
+      if (!entityId.startsWith('sensor.')) continue;
+
+      const entity = this.hass.states[entityId];
+      const friendlyName = entity.attributes?.friendly_name as string || '';
+
+      // Method 1: Check by entity_id pattern
+      const matchesPattern = dynblockPattern.test(entityId);
+
+      // Method 2: Check by friendly_name containing "Dynblock"
+      const prefixForName = prefix.toLowerCase().replace(/_/g, ' ');
+      const matchesFriendlyName = friendlyName.toLowerCase().includes(' dynblock ') &&
+        (friendlyName.toLowerCase().startsWith(prefixForName) ||
+         friendlyName.toLowerCase().startsWith(`${prefixForName} ${prefixForName}`));
+
+      // Method 3: Check if it has dynblock-specific attributes (network, reason, seconds)
+      const hasDynblockAttrs = entity.attributes?.network !== undefined ||
+        (entity.attributes?.reason !== undefined && entity.attributes?.seconds !== undefined);
+      const matchesDynblockAttrs = hasDynblockAttrs &&
+        (entityId.toLowerCase().includes(prefix.toLowerCase()) ||
+         friendlyName.toLowerCase().includes(prefix.toLowerCase().replace(/_/g, ' ')));
+
+      if (!matchesPattern && !matchesFriendlyName && !matchesDynblockAttrs) continue;
+
+      const blocks = parseInt(entity.state, 10);
+
+      const rule: DynamicRule = {
+        blocks: isNaN(blocks) ? 0 : blocks,
+        network: entity.attributes?.network as string | undefined,
+        reason: entity.attributes?.reason as string | undefined,
+        action: entity.attributes?.action as string | undefined,
+        seconds: entity.attributes?.seconds as number | undefined,
+        ebpf: entity.attributes?.ebpf as boolean | undefined,
+        warning: entity.attributes?.warning as boolean | undefined,
+        sources: entity.attributes?.sources as Record<string, number> | undefined,
+      };
+
+      rules.push({ entity, rule });
+    }
+
+    // Sort by blocks descending
+    return rules.sort((a, b) => b.rule.blocks - a.rule.blocks);
+  }
+
+  private _extractDynamicRuleName(entity: HassEntity): string {
+    // The entity name format is "{host} Dynblock {network}"
+    const friendlyName = entity.attributes?.friendly_name as string;
+    if (friendlyName) {
+      const match = friendlyName.match(/Dynblock (.+)$/);
+      if (match) return match[1];
+    }
+    // Try network attribute
+    const network = entity.attributes?.network as string;
+    if (network) return network;
+    // Fallback: extract from entity_id
+    const match = entity.entity_id.match(/_dynblock_(.+)$/);
+    if (match) return match[1].replace(/_/g, '.');
+    return 'Unknown';
+  }
+
+  private _toggleDynamicExpand(entityId: string) {
+    const expanded = new Set(this._expandedDynamic);
+    if (expanded.has(entityId)) {
+      expanded.delete(entityId);
+    } else {
+      expanded.add(entityId);
+    }
+    this._expandedDynamic = expanded;
+  }
+
+  private _formatTimeRemaining(seconds: number | undefined): string {
+    if (seconds === undefined || seconds <= 0) return '-';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
+  }
+
   private _getActionClass(action: string | undefined): string {
     if (!action) return '';
     const lower = action.toLowerCase();
@@ -415,6 +515,65 @@ export class DnsdistCard extends LitElement {
     `;
   }
 
+  private _renderDynamicRuleItem(entityId: string, rule: DynamicRule) {
+    const isExpanded = this._expandedDynamic.has(entityId);
+    const network = rule.network || this._extractDynamicRuleName(this.hass.states[entityId]);
+
+    return html`
+      <div
+        class="filter-item ${isExpanded ? 'expanded' : ''}"
+        @click=${() => this._toggleDynamicExpand(entityId)}
+      >
+        <div class="filter-main">
+          <span class="filter-name">${network}</span>
+          ${rule.action
+            ? html`<span class="filter-action ${this._getActionClass(rule.action)}">${rule.action}</span>`
+            : nothing}
+        </div>
+        <span class="filter-matches">${this._formatNumber(rule.blocks)}</span>
+
+        ${isExpanded
+          ? html`
+              <div class="filter-details">
+                ${rule.reason
+                  ? html`
+                      <div class="filter-detail-row">
+                        <span class="filter-detail-label">Reason:</span>
+                        <span class="filter-detail-value">${rule.reason}</span>
+                      </div>
+                    `
+                  : nothing}
+                ${rule.seconds !== undefined && rule.seconds > 0
+                  ? html`
+                      <div class="filter-detail-row">
+                        <span class="filter-detail-label">Time Left:</span>
+                        <span class="filter-detail-value">${this._formatTimeRemaining(rule.seconds)}</span>
+                      </div>
+                    `
+                  : nothing}
+                ${rule.ebpf !== undefined
+                  ? html`
+                      <div class="filter-detail-row">
+                        <span class="filter-detail-label">eBPF:</span>
+                        <span class="filter-detail-value">${rule.ebpf ? 'Yes' : 'No'}</span>
+                      </div>
+                    `
+                  : nothing}
+                ${rule.warning !== undefined && rule.warning
+                  ? html`
+                      <div class="filter-detail-row">
+                        <span class="filter-detail-label">Warning:</span>
+                        <span class="filter-detail-value">Yes</span>
+                      </div>
+                    `
+                  : nothing}
+              </div>
+            `
+          : nothing}
+      </div>
+    `;
+  }
+
   private _renderConfirmDialog() {
     if (!this._showConfirm) return nothing;
 
@@ -458,6 +617,7 @@ export class DnsdistCard extends LitElement {
     const cpu = this._getNumericValue('cpu');
     const cacheHit = this._getNumericValue('cache_hit_rate');
     const filterEntities = this._config.show_filters ? this._getFilterEntities() : [];
+    const dynamicRuleEntities = this._config.show_dynamic_rules ? this._getDynamicRuleEntities() : [];
 
     return html`
       <ha-card>
@@ -522,6 +682,18 @@ export class DnsdistCard extends LitElement {
             `
           : nothing}
 
+        <!-- Dynamic Rules (only shown if rules exist) -->
+        ${this._config.show_dynamic_rules && dynamicRuleEntities.length > 0
+          ? html`
+              <div class="section-header">Dynamic Rules (${dynamicRuleEntities.length})</div>
+              <div class="filters-list">
+                ${dynamicRuleEntities.map(({ entity, rule }) =>
+                  this._renderDynamicRuleItem(entity.entity_id, rule)
+                )}
+              </div>
+            `
+          : nothing}
+
         <!-- Actions -->
         ${this._config.show_actions
           ? html`
@@ -546,6 +718,10 @@ export class DnsdistCard extends LitElement {
     if (this._config?.show_filters) {
       const filterCount = this._getFilterEntities().length;
       size += Math.min(4, Math.ceil(filterCount / 2) + 1);
+    }
+    if (this._config?.show_dynamic_rules) {
+      const dynamicCount = this._getDynamicRuleEntities().length;
+      size += Math.min(4, Math.ceil(dynamicCount / 2) + 1);
     }
     if (this._config?.show_actions) size += 1;
     return size;

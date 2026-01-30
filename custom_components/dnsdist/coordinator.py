@@ -18,6 +18,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
+    ATTR_DYNAMIC_RULES,
     ATTR_FILTERING_RULES,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
@@ -77,6 +78,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         self._history_loaded = False
         # Avoid hammering unsupported filtering rules endpoint with 404s
         self._filtering_rules_supported: bool | None = None
+        self._dynamic_rules_supported: bool | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch and normalize dnsdist stats."""
@@ -125,6 +127,16 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
 
         if previous_rules is not None and ATTR_FILTERING_RULES not in normalized:
             normalized[ATTR_FILTERING_RULES] = previous_rules
+
+        # Preserve dynamic rules similarly
+        previous_dynamic: dict[str, Any] | None = None
+        if isinstance(self.data, dict):
+            maybe_dynamic = self.data.get(ATTR_DYNAMIC_RULES)
+            if isinstance(maybe_dynamic, dict):
+                previous_dynamic = maybe_dynamic
+
+        if previous_dynamic is not None and ATTR_DYNAMIC_RULES not in normalized:
+            normalized[ATTR_DYNAMIC_RULES] = previous_dynamic
 
         # --- Compute CPU % based on cpu-user-msec counter ---
         try:
@@ -179,6 +191,13 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             _LOGGER.debug("[%s] Filtering rules fetch failed: %s", self._name, err)
 
+        try:
+            dynamic_rules = await self._async_fetch_dynamic_rules(session, headers)
+            if dynamic_rules is not None:
+                normalized[ATTR_DYNAMIC_RULES] = dynamic_rules
+        except Exception as err:
+            _LOGGER.debug("[%s] Dynamic rules fetch failed: %s", self._name, err)
+
         return normalized
 
     def _zero_data(self) -> dict[str, Any]:
@@ -199,6 +218,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             "req_per_hour": 0,
             "req_per_day": 0,
             ATTR_FILTERING_RULES: {},
+            ATTR_DYNAMIC_RULES: {},
         }
 
     def _normalize(self, stats: list[dict[str, Any]] | dict[str, Any]) -> dict[str, Any]:
@@ -342,6 +362,96 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             "type": item.get("type"),
             "enabled": item.get("enabled"),
             "bypass": item.get("bypass"),
+        }
+
+        return rule
+
+    async def _async_fetch_dynamic_rules(
+        self, session: aiohttp.ClientSession, headers: dict[str, str]
+    ) -> dict[str, dict[str, Any]] | None:
+        """Fetch dynamic rules (dynblocks) and normalize them into a mapping."""
+
+        if self._dynamic_rules_supported is False:
+            return None
+
+        # dnsdist exposes dynblocks via /jsonstat?command=dynblocklist
+        url = f"{self._base_url}/jsonstat?command=dynblocklist"
+        payload: Any | None = None
+
+        try:
+            ssl_context = False if not self._verify_ssl else None
+            _LOGGER.debug("[%s] Requesting dynamic rules from %s", self._name, url)
+            async with timeout(10):
+                async with session.get(url, headers=headers, ssl=ssl_context) as resp:
+                    if resp.status == 404:
+                        if self._dynamic_rules_supported is not False:
+                            _LOGGER.debug(
+                                "[%s] Dynamic rules endpoint not available (404)",
+                                self._name,
+                            )
+                        self._dynamic_rules_supported = False
+                        return None
+                    if resp.status != 200:
+                        raise ConnectionError(f"HTTP {resp.status}")
+                    payload = await resp.json()
+        except Exception as err:
+            _LOGGER.debug("[%s] Could not retrieve dynamic rules: %s", self._name, err)
+            return None
+
+        if payload is None:
+            return None
+
+        self._dynamic_rules_supported = True
+
+        # Response format: {"127.0.0.1/32": {"blocks": 3, "reason": "...", "seconds": 10}, ...}
+        dynblocks_raw: dict[str, Any] = {}
+        if isinstance(payload, dict):
+            # The response is directly a dict keyed by network
+            dynblocks_raw = payload
+
+        if not dynblocks_raw:
+            return {}
+
+        rules: dict[str, dict[str, Any]] = {}
+        for key, item in dynblocks_raw.items():
+            if not isinstance(item, dict):
+                continue
+            normalized = self._normalize_dynamic_rule(key, item)
+            if normalized is None:
+                continue
+            slug = normalized.pop("slug")
+            rules[slug] = normalized
+
+        return rules
+
+    def _normalize_dynamic_rule(self, key: str, item: dict[str, Any]) -> dict[str, Any] | None:
+        """Normalize a dynamic rule (dynblock) entry."""
+        # The key is typically the network/client being blocked (e.g., "192.168.1.0/24")
+        network = str(key).strip()
+        if not network:
+            return None
+
+        slug = slugify_rule(network)
+
+        # Extract block count from various possible field names
+        blocks = 0
+        for field in ("blocks", "count", "hits", "nmBlocks"):
+            if field in item:
+                blocks = coerce_int(item.get(field))
+                break
+
+        # Extract remaining seconds
+        seconds = coerce_int(item.get("seconds", 0))
+
+        rule = {
+            "slug": slug,
+            "network": network,
+            "reason": item.get("reason") or item.get("message") or "Unknown",
+            "action": item.get("action") or "refused",
+            "blocks": blocks,
+            "seconds": seconds,
+            "ebpf": item.get("ebpf", False),
+            "warning": item.get("warning", False),
         }
 
         return rule

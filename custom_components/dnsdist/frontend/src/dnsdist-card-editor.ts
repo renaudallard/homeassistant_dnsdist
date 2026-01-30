@@ -112,6 +112,7 @@ export class DnsdistCardEditor extends LitElement {
       /^sensor\.(.+?)_cpu_usage$/,
       /^sensor\.(.+?)_responses$/,
       /^sensor\.(.+?)_filter_/,  // Filter sensors
+      /^sensor\.(.+?)_dynblock_/,  // Dynamic rule sensors
     ];
 
     for (const entityId of Object.keys(this.hass.states)) {
@@ -196,6 +197,23 @@ export class DnsdistCardEditor extends LitElement {
           />
           Show Filtering Rules
         </label>
+      </div>
+
+      <div class="form-row">
+        <label>
+          <input
+            type="checkbox"
+            .checked=${this._config.show_dynamic_rules !== false}
+            @change=${(e: Event) => {
+              const checked = (e.target as HTMLInputElement).checked;
+              this._updateConfig('show_dynamic_rules', checked);
+            }}
+          />
+          Show Dynamic Rules
+        </label>
+        <div class="form-hint">
+          Display dynamic blocks (rate limiting, DoS protection)
+        </div>
       </div>
 
       <div class="form-row">
