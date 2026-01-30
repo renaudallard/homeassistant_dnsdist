@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.3.4-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.3.5-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -38,7 +38,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.3.4** |
+| **Current version** | **1.3.5** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -153,7 +153,7 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 The card is automatically registered when the integration loads. If needed, you can manually add the resource:
 
 1. Go to **Settings → Dashboards → Resources**
-2. Add `/dnsdist_static/dnsdist-card.js?v=1.3.4` as a JavaScript Module
+2. Add `/dnsdist_static/dnsdist-card.js?v=1.3.5` as a JavaScript Module
 
 ### Usage
 
@@ -299,7 +299,7 @@ custom_components/dnsdist/
 
 ## 📝 Changelog <a id="changelog"></a>
 
-### 1.3.4
+### 1.3.5
 - Add toggle button in Lovelace card to show/hide dynamic rules with zero hits (hidden by default)
 - Extrapolate hourly and daily request rates from available history when less than 1 hour or 24 hours of data is collected
 
