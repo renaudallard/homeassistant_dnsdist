@@ -114,23 +114,39 @@ export const cardStyles = css`
   .gauge-container {
     display: flex;
     justify-content: center;
-    gap: 32px;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 24px;
     flex-wrap: wrap;
   }
 
   .gauge {
     position: relative;
-    width: 100px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
+    gap: 4px;
   }
 
   .gauge-svg {
     width: 100px;
     height: 90px;
     overflow: visible;
+    flex-shrink: 0;
+  }
+
+  .gauge-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 50px;
+  }
+
+  .gauge-info-left {
+    text-align: right;
+  }
+
+  .gauge-info-right {
+    text-align: left;
   }
 
   .gauge-arc-path {
@@ -155,14 +171,12 @@ export const cardStyles = css`
     font-size: 1.1rem;
     font-weight: 600;
     color: var(--dnsdist-primary-text);
-    margin-top: 4px;
   }
 
   .gauge-label {
     font-size: 0.7rem;
     color: var(--dnsdist-secondary-text);
     text-transform: uppercase;
-    margin-top: 2px;
   }
 
   /* Section Headers */
@@ -349,16 +363,28 @@ export const cardStyles = css`
 
   /* Compact Mode */
   :host([compact]) .gauge-container {
-    gap: 12px;
+    gap: 4px;
   }
 
   :host([compact]) .gauge {
-    width: 80px;
+    gap: 2px;
   }
 
   :host([compact]) .gauge-svg {
     width: 80px;
     height: 72px;
+  }
+
+  :host([compact]) .gauge-info {
+    min-width: 40px;
+  }
+
+  :host([compact]) .gauge-value {
+    font-size: 0.95rem;
+  }
+
+  :host([compact]) .gauge-label {
+    font-size: 0.6rem;
   }
 
   :host([compact]) .stat-tile {

@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.3.0-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.3.1-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -38,7 +38,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.3.0** |
+| **Current version** | **1.3.1** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -133,7 +133,9 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 ### Features
 
 - **Header** with title and security status badge (OK/Warning/Critical color-coded)
-- **Needle gauges** for CPU usage and Cache Hit Rate with color gradients
+- **Needle gauges** for CPU usage and Cache Hit Rate with color gradients in compact horizontal layout
+  - CPU label and value on the left, gauge on the right
+  - Cache Hit gauge on the left, label and value on the right
   - CPU: green (low) to red (high) indicating load severity
   - Cache Hit: red (low) to green (high) indicating cache efficiency
 - **Uptime display** in human-readable format
@@ -150,7 +152,7 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 The card is automatically registered when the integration loads. If needed, you can manually add the resource:
 
 1. Go to **Settings → Dashboards → Resources**
-2. Add `/dnsdist_static/dnsdist-card.js?v=1.3.0` as a JavaScript Module
+2. Add `/dnsdist_static/dnsdist-card.js?v=1.3.1` as a JavaScript Module
 
 ### Usage
 
@@ -295,6 +297,12 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.3.1
+- Redesign gauge layout for more compact display
+  - CPU label and value positioned on the left of the gauge
+  - Cache Hit label and value positioned on the right of the gauge
+  - Reduced horizontal spacing between gauges
 
 ### 1.3.0
 - Add dynamic rules (dynblocks) support
