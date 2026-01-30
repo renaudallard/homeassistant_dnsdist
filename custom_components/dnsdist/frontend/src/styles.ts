@@ -361,6 +361,11 @@ export const cardStyles = css`
     --mdc-icon-size: 18px;
   }
 
+  .action-button.toggle-off {
+    background: var(--dnsdist-divider);
+    color: var(--dnsdist-secondary-text);
+  }
+
   /* Compact Mode */
   :host([compact]) .gauge-container {
     gap: 4px;

@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.3.3-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.3.4-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -38,7 +38,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.3.3** |
+| **Current version** | **1.3.4** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -66,7 +66,7 @@
 - **Diagnostics bundle** that automatically redacts sensitive data.
 - **REST-only services** (`clear_cache`, `enable_server`, `disable_server`, `get_backends`) and a **Clear Cache** device button for both hosts and groups.
 
-> **Rate sensors need runway:** `req_per_hour` stabilizes after the first hour. `req_per_day` needs 24 hours of samples. Early readings may appear lower than expected.
+> **Rate sensors:** Both `req_per_hour` and `req_per_day` are extrapolated from available history until enough data is collected (1 hour and 24 hours respectively), then switch to actual measured values.
 
 ---
 
@@ -116,8 +116,8 @@ Each host or group creates a Home Assistant device with these sensors:
 - `cpu` — `%` (`MEASUREMENT`)
 - `uptime` — seconds (`device_class=duration`, `MEASUREMENT`)
   - Attribute `human_readable`: `Xd HHh MMm`
-- `req_per_hour` — integer requests/hour (rolling 1-hour window)
-- `req_per_day` — integer requests/day (rolling 24-hour window)
+- `req_per_hour` — integer requests/hour (rolling 1-hour window, extrapolated from available history until 1h of data is collected)
+- `req_per_day` — integer requests/day (rolling 24-hour window, extrapolated from available history until 24h of data is collected)
 - `security_status` — string with `status_code` (0–3) and `status_label`
 - **Filtering rule sensors** (`Filter <rule name>`) — per-rule matches for hosts, aggregated counts plus a `sources` attribute for groups. Icons flip between `mdi:filter-check-outline` (idle) and `mdi:filter` (active).
 - **Dynamic rule sensors** (`Dynblock <network>`) — tracks temporary blocks (dynblocks) with attributes for reason, action, time remaining, and eBPF status. Icons flip between `mdi:shield-check-outline` (idle) and `mdi:shield-alert` (active).
@@ -143,6 +143,7 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 - **Request rates** tiles: Per Hour and Per Day
 - **Filtering rules** list sorted by match count with expandable details
 - **Dynamic rules** list showing temporary blocks with reason, time remaining, and block count
+- **Show/Hide 0 Hits** toggle button to show or hide dynamic rules with zero matches (hidden by default)
 - **Clear Cache** button with confirmation dialog
 - **Theme support** respects Home Assistant light/dark mode
 - **Compact mode** for sidebar placement
@@ -152,7 +153,7 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 The card is automatically registered when the integration loads. If needed, you can manually add the resource:
 
 1. Go to **Settings → Dashboards → Resources**
-2. Add `/dnsdist_static/dnsdist-card.js?v=1.3.3` as a JavaScript Module
+2. Add `/dnsdist_static/dnsdist-card.js?v=1.3.4` as a JavaScript Module
 
 ### Usage
 
@@ -297,6 +298,10 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.3.4
+- Add toggle button in Lovelace card to show/hide dynamic rules with zero hits (hidden by default)
+- Extrapolate hourly and daily request rates from available history when less than 1 hour or 24 hours of data is collected
 
 ### 1.3.3
 - Fix OptionsFlow compatibility with newer Home Assistant versions
