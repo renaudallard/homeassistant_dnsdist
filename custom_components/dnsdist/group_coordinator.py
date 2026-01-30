@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
+    ATTR_DYNAMIC_RULES,
     ATTR_FILTERING_RULES,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
@@ -101,6 +102,7 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
             uptime_values: list[int] = []
             sec_values: list[str] = []
             aggregated_rules: dict[str, dict[str, Any]] = {}
+            aggregated_dynamic: dict[str, dict[str, Any]] = {}
 
             for c in active_members:
                 d = c.data or {}
@@ -152,6 +154,38 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                             if key in rule and key not in entry and rule[key] is not None:
                                 entry[key] = rule[key]
 
+                # Aggregate dynamic rules (dynblocks)
+                dynamic_rules = d.get(ATTR_DYNAMIC_RULES)
+                if isinstance(dynamic_rules, dict):
+                    source_name = getattr(c, "_name", "dnsdist")
+                    for rule in dynamic_rules.values():
+                        if not isinstance(rule, dict):
+                            continue
+
+                        network = str(rule.get("network") or "Unknown").strip()
+                        if not network:
+                            network = "Unknown"
+
+                        agg_slug = slugify_rule(network)
+                        blocks = coerce_int(rule.get("blocks"))
+
+                        entry = aggregated_dynamic.setdefault(
+                            agg_slug,
+                            {
+                                "network": network,
+                                "blocks": 0,
+                                "sources": {},
+                            },
+                        )
+
+                        entry["blocks"] += blocks
+                        entry_sources = entry.setdefault("sources", {})
+                        entry_sources[source_name] = entry_sources.get(source_name, 0) + blocks
+
+                        for key in ("reason", "action", "seconds", "ebpf", "warning"):
+                            if key in rule and key not in entry and rule[key] is not None:
+                                entry[key] = rule[key]
+
             avg_cpu = round(sum(cpu_values) / len(cpu_values), 2) if cpu_values else 0.0
             max_uptime = max(uptime_values) if uptime_values else 0
 
@@ -175,6 +209,11 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                 aggregated[ATTR_FILTERING_RULES] = aggregated_rules
             elif ATTR_FILTERING_RULES in self._last_data:
                 aggregated[ATTR_FILTERING_RULES] = self._last_data.get(ATTR_FILTERING_RULES, {})
+
+            if aggregated_dynamic:
+                aggregated[ATTR_DYNAMIC_RULES] = aggregated_dynamic
+            elif ATTR_DYNAMIC_RULES in self._last_data:
+                aggregated[ATTR_DYNAMIC_RULES] = self._last_data.get(ATTR_DYNAMIC_RULES, {})
 
             # --- Rolling-window request totals for the group ---
             try:
@@ -226,4 +265,5 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
             "req_per_hour": 0,
             "req_per_day": 0,
             ATTR_FILTERING_RULES: {},
+            ATTR_DYNAMIC_RULES: {},
         }

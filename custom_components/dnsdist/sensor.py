@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import (
+    ATTR_DYNAMIC_RULES,
     ATTR_FILTERING_RULES,
     CONF_INCLUDE_FILTER_SENSORS,
     CONF_IS_GROUP,
@@ -119,6 +120,41 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         _async_sync_filtering_rules()
         entry.async_on_unload(coordinator.async_add_listener(_async_sync_filtering_rules))
+
+        # Also sync dynamic rules (dynblocks)
+        known_dynamic: set[str] = set()
+
+        @callback
+        def _async_sync_dynamic_rules() -> None:
+            if not coordinator.data:
+                return
+            rules = coordinator.data.get(ATTR_DYNAMIC_RULES)
+            if not isinstance(rules, dict):
+                return
+
+            new_entities: list[DnsdistDynamicRuleSensor] = []
+            for slug in rules:
+                if slug in known_dynamic:
+                    continue
+                entity = DnsdistDynamicRuleSensor(
+                    coordinator=coordinator,
+                    entry_id=entry.entry_id,
+                    rule_slug=slug,
+                    is_group=is_group,
+                )
+                known_dynamic.add(slug)
+                new_entities.append(entity)
+
+            if new_entities:
+                _LOGGER.debug(
+                    "[dnsdist] Adding dynamic rule sensors for %s: %s",
+                    getattr(coordinator, "_name", "dnsdist"),
+                    [entity._slug for entity in new_entities],
+                )
+                async_add_entities(new_entities)
+
+        _async_sync_dynamic_rules()
+        entry.async_on_unload(coordinator.async_add_listener(_async_sync_dynamic_rules))
 
 
 class DnsdistSensor(CoordinatorEntity, SensorEntity):
@@ -276,6 +312,96 @@ class DnsdistFilteringRuleSensor(CoordinatorEntity, SensorEntity):
         for key in ("id", "uuid", "action", "rule", "type", "enabled", "bypass"):
             if key in rule and rule[key] is not None:
                 attrs[key] = rule[key]
+        sources = rule.get("sources")
+        if isinstance(sources, dict) and sources:
+            attrs["sources"] = sources
+        return attrs
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return build_device_info(self.coordinator, self._is_group)
+
+
+class DnsdistDynamicRuleSensor(CoordinatorEntity, SensorEntity):
+    """Sensor tracking blocks for a dnsdist dynamic rule (dynblock)."""
+
+    _attr_has_entity_name = False
+    _attr_should_poll = False
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = COUNT
+
+    def __init__(
+        self,
+        *,
+        coordinator,
+        entry_id: str,
+        rule_slug: str,
+        is_group: bool,
+    ) -> None:
+        super().__init__(coordinator)
+        self._slug = rule_slug
+        self._is_group = is_group
+        self._attr_unique_id = f"{entry_id}:dynamic_rule:{rule_slug}"
+
+    def _rule_data(self) -> dict[str, Any]:
+        data = self.coordinator.data or {}
+        rules = data.get(ATTR_DYNAMIC_RULES, {}) if isinstance(data, dict) else {}
+        if isinstance(rules, dict):
+            return rules.get(self._slug, {})
+        return {}
+
+    @property
+    def name(self) -> str:
+        host = getattr(self.coordinator, "_name", "dnsdist")
+        rule = self._rule_data()
+        network = str(rule.get("network") or "Unknown").strip()
+        if not network:
+            network = "Unknown"
+        return f"{host} Dynblock {network}".strip()
+
+    @property
+    def native_value(self):
+        rule = self._rule_data()
+        blocks = rule.get("blocks")
+        try:
+            if isinstance(blocks, bool):
+                return int(blocks)
+            if isinstance(blocks, (int, float)):
+                return int(blocks)
+            if isinstance(blocks, str):
+                return int(float(blocks))
+        except (TypeError, ValueError):
+            return None
+        if blocks is None:
+            return 0 if rule else None
+        return blocks
+
+    @property
+    def icon(self) -> str | None:
+        """Return a status icon based on block counts."""
+        value = self.native_value
+        if value in (0, 0.0):
+            return "mdi:shield-check-outline"
+        if isinstance(value, (int, float)) and value <= 0:
+            return "mdi:shield-check-outline"
+        return "mdi:shield-alert"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        rule = self._rule_data()
+        attrs: dict[str, Any] = {}
+        for key in ("network", "reason", "action", "seconds", "ebpf", "warning"):
+            if key in rule and rule[key] is not None:
+                attrs[key] = rule[key]
+        # Add human-readable time remaining
+        seconds = rule.get("seconds")
+        if isinstance(seconds, (int, float)) and seconds > 0:
+            mins = int(seconds // 60)
+            secs = int(seconds % 60)
+            if mins > 0:
+                attrs["time_remaining"] = f"{mins}m {secs}s"
+            else:
+                attrs["time_remaining"] = f"{secs}s"
         sources = rule.get("sources")
         if isinstance(sources, dict) and sources:
             attrs["sources"] = sources
