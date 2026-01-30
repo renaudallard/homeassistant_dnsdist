@@ -31,6 +31,9 @@ export class DnsdistCard extends LitElement {
   @state() private _showConfirm = false;
   @state() private _confirmAction: (() => void) | null = null;
 
+  // Timer for updating dynamic rule countdowns
+  private _countdownTimer?: ReturnType<typeof setInterval>;
+
   static getConfigElement() {
     return document.createElement('dnsdist-card-editor');
   }
@@ -64,6 +67,26 @@ export class DnsdistCard extends LitElement {
       this.setAttribute('compact', '');
     } else {
       this.removeAttribute('compact');
+    }
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // Start countdown timer for dynamic rules (updates every second)
+    this._countdownTimer = setInterval(() => {
+      // Only request update if we have expanded dynamic rules with active countdowns
+      if (this._expandedDynamic.size > 0) {
+        this.requestUpdate();
+      }
+    }, 1000);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    // Clean up the countdown timer
+    if (this._countdownTimer) {
+      clearInterval(this._countdownTimer);
+      this._countdownTimer = undefined;
     }
   }
 
@@ -297,17 +320,41 @@ export class DnsdistCard extends LitElement {
 
       if (!matchesPattern && !matchesFriendlyName && !matchesDynblockAttrs) continue;
 
+      // Skip entities with invalid/unavailable state
+      if (entity.state === 'unknown' || entity.state === 'unavailable') continue;
+
       const blocks = parseInt(entity.state, 10);
+      const seconds = entity.attributes?.seconds as number | undefined;
+      const network = entity.attributes?.network as string | undefined;
+
+      // Skip if missing essential dynblock attributes (stale entity)
+      if (seconds === undefined || network === undefined) continue;
+
+      // Calculate if the dynblock has expired based on elapsed time
+      let isExpired = false;
+      if (seconds <= 0) {
+        isExpired = true;
+      } else if (entity.last_updated) {
+        const updatedTime = new Date(entity.last_updated).getTime();
+        const elapsedSeconds = Math.floor((Date.now() - updatedTime) / 1000);
+        if (seconds - elapsedSeconds <= 0) {
+          isExpired = true;
+        }
+      }
+
+      // Skip expired dynblocks
+      if (isExpired) continue;
 
       const rule: DynamicRule = {
         blocks: isNaN(blocks) ? 0 : blocks,
         network: entity.attributes?.network as string | undefined,
         reason: entity.attributes?.reason as string | undefined,
         action: entity.attributes?.action as string | undefined,
-        seconds: entity.attributes?.seconds as number | undefined,
+        seconds: seconds,
         ebpf: entity.attributes?.ebpf as boolean | undefined,
         warning: entity.attributes?.warning as boolean | undefined,
         sources: entity.attributes?.sources as Record<string, number> | undefined,
+        last_updated: entity.last_updated,
       };
 
       rules.push({ entity, rule });
@@ -343,10 +390,22 @@ export class DnsdistCard extends LitElement {
     this._expandedDynamic = expanded;
   }
 
-  private _formatTimeRemaining(seconds: number | undefined): string {
+  private _formatTimeRemaining(seconds: number | undefined, lastUpdated?: string): string {
     if (seconds === undefined || seconds <= 0) return '-';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+
+    // Calculate elapsed time since last update to show real-time countdown
+    let adjustedSeconds = seconds;
+    if (lastUpdated) {
+      const updatedTime = new Date(lastUpdated).getTime();
+      const now = Date.now();
+      const elapsedSeconds = Math.floor((now - updatedTime) / 1000);
+      adjustedSeconds = Math.max(0, seconds - elapsedSeconds);
+    }
+
+    if (adjustedSeconds <= 0) return 'Expiring...';
+
+    const mins = Math.floor(adjustedSeconds / 60);
+    const secs = Math.floor(adjustedSeconds % 60);
     if (mins > 0) {
       return `${mins}m ${secs}s`;
     }
@@ -551,7 +610,7 @@ export class DnsdistCard extends LitElement {
                   ? html`
                       <div class="filter-detail-row">
                         <span class="filter-detail-label">Time Left:</span>
-                        <span class="filter-detail-value">${this._formatTimeRemaining(rule.seconds)}</span>
+                        <span class="filter-detail-value">${this._formatTimeRemaining(rule.seconds, rule.last_updated)}</span>
                       </div>
                     `
                   : nothing}

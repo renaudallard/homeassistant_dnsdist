@@ -122,7 +122,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entry.async_on_unload(coordinator.async_add_listener(_async_sync_filtering_rules))
 
         # Also sync dynamic rules (dynblocks)
-        known_dynamic: set[str] = set()
+        # Track slug -> entity mapping so we can remove expired dynblocks
+        dynamic_entities: dict[str, DnsdistDynamicRuleSensor] = {}
 
         @callback
         def _async_sync_dynamic_rules() -> None:
@@ -130,11 +131,27 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 return
             rules = coordinator.data.get(ATTR_DYNAMIC_RULES)
             if not isinstance(rules, dict):
-                return
+                rules = {}
 
+            current_slugs = set(rules.keys())
+            known_slugs = set(dynamic_entities.keys())
+
+            # Remove entities for expired dynblocks
+            expired_slugs = known_slugs - current_slugs
+            for slug in expired_slugs:
+                entity = dynamic_entities.pop(slug, None)
+                if entity:
+                    _LOGGER.debug(
+                        "[dnsdist] Removing expired dynamic rule sensor for %s: %s",
+                        getattr(coordinator, "_name", "dnsdist"),
+                        slug,
+                    )
+                    hass.async_create_task(entity.async_remove())
+
+            # Add new entities
             new_entities: list[DnsdistDynamicRuleSensor] = []
             for slug in rules:
-                if slug in known_dynamic:
+                if slug in dynamic_entities:
                     continue
                 entity = DnsdistDynamicRuleSensor(
                     coordinator=coordinator,
@@ -142,7 +159,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     rule_slug=slug,
                     is_group=is_group,
                 )
-                known_dynamic.add(slug)
+                dynamic_entities[slug] = entity
                 new_entities.append(entity)
 
             if new_entities:

@@ -64,6 +64,7 @@ export interface DynamicRule {
   warning?: boolean;
   blocks: number;
   sources?: Record<string, number>;
+  last_updated?: string;  // ISO timestamp for calculating elapsed time
 }
 
 export interface LovelaceCardEditor extends HTMLElement {

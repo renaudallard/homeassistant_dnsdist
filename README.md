@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.3.1-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.3.2-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -38,7 +38,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.3.1** |
+| **Current version** | **1.3.2** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -152,7 +152,7 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 The card is automatically registered when the integration loads. If needed, you can manually add the resource:
 
 1. Go to **Settings → Dashboards → Resources**
-2. Add `/dnsdist_static/dnsdist-card.js?v=1.3.1` as a JavaScript Module
+2. Add `/dnsdist_static/dnsdist-card.js?v=1.3.2` as a JavaScript Module
 
 ### Usage
 
@@ -297,6 +297,14 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.3.2
+- Fix dynamic rules (dynblocks) not being removed from card when they expire
+  - Sensors are now automatically removed when dnsdist stops returning the block
+  - Card filters out expired dynblocks based on elapsed time since last update
+- Fix time remaining countdown not updating in real-time
+  - Countdown now decrements every second when a dynblock is expanded
+  - Shows "Expiring..." when time reaches zero
 
 ### 1.3.1
 - Redesign gauge layout for more compact display
