@@ -8,6 +8,7 @@ export interface DnsdistCardConfig {
   title?: string;
   show_graphs?: boolean;
   show_filters?: boolean;
+  show_dynamic_rules?: boolean;
   show_actions?: boolean;
   compact?: boolean;
 }
@@ -51,6 +52,17 @@ export interface FilteringRule {
   enabled?: boolean;
   bypass?: boolean;
   matches: number;
+  sources?: Record<string, number>;
+}
+
+export interface DynamicRule {
+  network?: string;
+  reason?: string;
+  action?: string;
+  seconds?: number;
+  ebpf?: boolean;
+  warning?: boolean;
+  blocks: number;
   sources?: Record<string, number>;
 }
 

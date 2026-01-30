@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.2.1-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.2.2-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -38,7 +38,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.2.1** |
+| **Current version** | **1.2.2** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -54,6 +54,7 @@
   - **Average:** CPU %
   - **Max:** uptime
 - **Filtering rule sensors** for per-rule match counts (opt-in for hosts, on by default for groups) complete with idle/active icons.
+- **Dynamic rule sensors** for temporary blocks (dynblocks) from rate limiting, DoS protection, etc.
 - **Custom Lovelace card** (`dnsdist-card`) for a beautiful dashboard display with gauges, counters, and filtering rules.
 - **Long-term statistics ready** sensors:
   - Monotonic counters as `TOTAL_INCREASING` (`count` unit)
@@ -119,6 +120,7 @@ Each host or group creates a Home Assistant device with these sensors:
 - `req_per_day` — integer requests/day (rolling 24-hour window)
 - `security_status` — string with `status_code` (0–3) and `status_label`
 - **Filtering rule sensors** (`Filter <rule name>`) — per-rule matches for hosts, aggregated counts plus a `sources` attribute for groups. Icons flip between `mdi:filter-check-outline` (idle) and `mdi:filter` (active).
+- **Dynamic rule sensors** (`Dynblock <network>`) — tracks temporary blocks (dynblocks) with attributes for reason, action, time remaining, and eBPF status. Icons flip between `mdi:shield-check-outline` (idle) and `mdi:shield-alert` (active).
 
 > Sensor entity names are metric-only. Home Assistant automatically prefixes them with the device name (e.g., "elrond Cache Hit Rate").
 
@@ -138,6 +140,7 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 - **Traffic counters** grid: Queries, Responses, Drops, Rule Drops, Errors
 - **Request rates** tiles: Per Hour and Per Day
 - **Filtering rules** list sorted by match count with expandable details
+- **Dynamic rules** list showing temporary blocks with reason, time remaining, and block count
 - **Clear Cache** button with confirmation dialog
 - **Theme support** respects Home Assistant light/dark mode
 - **Compact mode** for sidebar placement
@@ -147,7 +150,7 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 The card is automatically registered when the integration loads. If needed, you can manually add the resource:
 
 1. Go to **Settings → Dashboards → Resources**
-2. Add `/dnsdist_static/dnsdist-card.js?v=1.2.1` as a JavaScript Module
+2. Add `/dnsdist_static/dnsdist-card.js?v=1.2.2` as a JavaScript Module
 
 ### Usage
 
@@ -158,6 +161,7 @@ type: custom:dnsdist-card
 entity_prefix: dns1              # Required: matches your dnsdist device name
 title: My DNS Server             # Optional: custom card title
 show_filters: true               # Optional: show filtering rules section (default: true)
+show_dynamic_rules: true         # Optional: show dynamic rules section (default: true)
 show_actions: true               # Optional: show action buttons (default: true)
 compact: false                   # Optional: compact mode for sidebars (default: false)
 ```
@@ -169,6 +173,7 @@ compact: false                   # Optional: compact mode for sidebars (default:
 | `entity_prefix` | string | *required* | The device name prefix used for entity IDs (e.g., `dns1` for `sensor.dns1_total_queries`) |
 | `title` | string | entity_prefix | Custom title displayed in the card header |
 | `show_filters` | boolean | `true` | Show the filtering rules section |
+| `show_dynamic_rules` | boolean | `true` | Show the dynamic rules (dynblocks) section |
 | `show_actions` | boolean | `true` | Show action buttons (Clear Cache) |
 | `compact` | boolean | `false` | Use smaller sizes for sidebar placement |
 
@@ -290,6 +295,17 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.2.2
+- Add dynamic rules (dynblocks) support
+  - New sensors track temporary blocks from rate limiting and DoS protection
+  - Attributes include network, reason, action, time remaining, and eBPF status
+  - Icons flip between shield-check (idle) and shield-alert (active)
+- Add dynamic rules section to Lovelace card
+  - Displays blocked networks with block count and expandable details
+  - New `show_dynamic_rules` configuration option (default: true)
+  - Visual editor toggle for dynamic rules display
+- Group aggregation for dynamic rules with source tracking
 
 ### 1.2.1
 - Redesign gauge visualization with needle indicator and segmented color gradient arc
