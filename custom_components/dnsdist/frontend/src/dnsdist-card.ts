@@ -29,6 +29,7 @@ export class DnsdistCard extends LitElement {
   @state() private _expandedFilters: Set<string> = new Set();
   @state() private _expandedDynamic: Set<string> = new Set();
   @state() private _showZeroMatchDynamic = false;
+  @state() private _showZeroMatchRules = false;
   @state() private _showConfirm = false;
   @state() private _confirmAction: (() => void) | null = null;
 
@@ -253,8 +254,13 @@ export class DnsdistCard extends LitElement {
       filters.push({ entity, rule });
     }
 
+    // Filter out zero-match rules unless toggle is enabled
+    const filteredRules = this._showZeroMatchRules
+      ? filters
+      : filters.filter(({ rule }) => rule.matches > 0);
+
     // Sort by matches descending
-    return filters.sort((a, b) => b.rule.matches - a.rule.matches);
+    return filteredRules.sort((a, b) => b.rule.matches - a.rule.matches);
   }
 
   private _extractRuleName(entity: HassEntity): string {
@@ -461,6 +467,10 @@ export class DnsdistCard extends LitElement {
 
   private _toggleShowZeroMatchDynamic() {
     this._showZeroMatchDynamic = !this._showZeroMatchDynamic;
+  }
+
+  private _toggleShowZeroMatchRules() {
+    this._showZeroMatchRules = !this._showZeroMatchRules;
   }
 
   private _renderGaugeSvg(needleRotation: number, colors: string[]) {
@@ -775,6 +785,17 @@ export class DnsdistCard extends LitElement {
                   <ha-icon icon="mdi:database-refresh"></ha-icon>
                   Clear Cache
                 </button>
+                ${this._config.show_filters
+                  ? html`
+                      <button
+                        class="action-button ${this._showZeroMatchRules ? '' : 'toggle-off'}"
+                        @click=${this._toggleShowZeroMatchRules}
+                      >
+                        <ha-icon icon="${this._showZeroMatchRules ? 'mdi:eye-off' : 'mdi:eye'}"></ha-icon>
+                        ${this._showZeroMatchRules ? 'Hide Rule 0 Hits' : 'Show Rule 0 Hits'}
+                      </button>
+                    `
+                  : nothing}
                 ${this._config.show_dynamic_rules
                   ? html`
                       <button
@@ -782,7 +803,7 @@ export class DnsdistCard extends LitElement {
                         @click=${this._toggleShowZeroMatchDynamic}
                       >
                         <ha-icon icon="${this._showZeroMatchDynamic ? 'mdi:eye-off' : 'mdi:eye'}"></ha-icon>
-                        ${this._showZeroMatchDynamic ? 'Hide 0 Hits' : 'Show 0 Hits'}
+                        ${this._showZeroMatchDynamic ? 'Hide Dyn 0 Hits' : 'Show Dyn 0 Hits'}
                       </button>
                     `
                   : nothing}
