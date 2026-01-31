@@ -17,8 +17,21 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
+    ATTR_CACHE_HITS,
+    ATTR_CACHE_HITRATE,
+    ATTR_CACHE_MISSES,
+    ATTR_CPU,
+    ATTR_DOWNSTREAM_ERRORS,
+    ATTR_DROPS,
     ATTR_DYNAMIC_RULES,
     ATTR_FILTERING_RULES,
+    ATTR_QUERIES,
+    ATTR_REQ_PER_DAY,
+    ATTR_REQ_PER_HOUR,
+    ATTR_RESPONSES,
+    ATTR_RULE_DROP,
+    ATTR_SECURITY_STATUS,
+    ATTR_UPTIME,
     CONF_INCLUDE_FILTER_SENSORS,
     CONF_IS_GROUP,
     DOMAIN,
@@ -45,30 +58,32 @@ async def async_setup_entry(hass, entry, async_add_entities):
     # NOTE: Labels below are metric-only. HA will prefix with device (host/group) name
     # because _attr_has_entity_name = True on the entity class.
     metric_map: dict[str, tuple[str, Any, str, SensorStateClass | None]] = {
-        "queries": ("Total Queries", COUNT, "mdi:dns", SensorStateClass.TOTAL_INCREASING),
-        "responses": ("Responses", COUNT, "mdi:send", SensorStateClass.TOTAL_INCREASING),
-        "drops": ("Dropped Queries", COUNT, "mdi:cancel", SensorStateClass.TOTAL_INCREASING),
-        "rule_drop": ("Rule Drops", COUNT, "mdi:shield-off-outline", SensorStateClass.TOTAL_INCREASING),
-        "downstream_errors": (
+        ATTR_QUERIES: ("Total Queries", COUNT, "mdi:dns", SensorStateClass.TOTAL_INCREASING),
+        ATTR_RESPONSES: ("Responses", COUNT, "mdi:send", SensorStateClass.TOTAL_INCREASING),
+        ATTR_DROPS: ("Dropped Queries", COUNT, "mdi:cancel", SensorStateClass.TOTAL_INCREASING),
+        ATTR_RULE_DROP: ("Rule Drops", COUNT, "mdi:shield-off-outline", SensorStateClass.TOTAL_INCREASING),
+        ATTR_DOWNSTREAM_ERRORS: (
             "Downstream Send Errors",
             COUNT,
             "mdi:arrow-down-thick",
             SensorStateClass.TOTAL_INCREASING,
         ),
-        "cache_hits": ("Cache Hits", COUNT, "mdi:database-check", SensorStateClass.TOTAL_INCREASING),
-        "cache_misses": (
+        ATTR_CACHE_HITS: ("Cache Hits", COUNT, "mdi:database-check", SensorStateClass.TOTAL_INCREASING),
+        ATTR_CACHE_MISSES: (
             "Cache Misses",
             COUNT,
             "mdi:database-remove",
             SensorStateClass.TOTAL_INCREASING,
         ),
-        "cacheHit": ("Cache Hit Rate", PERCENTAGE, "mdi:gauge", SensorStateClass.MEASUREMENT),
-        "cpu": ("CPU Usage", PERCENTAGE, "mdi:cpu-64-bit", SensorStateClass.MEASUREMENT),
-        "uptime": ("Uptime", UnitOfTime.SECONDS, "mdi:timer-outline", SensorStateClass.MEASUREMENT),
+        ATTR_CACHE_HITRATE: ("Cache Hit Rate", PERCENTAGE, "mdi:gauge", SensorStateClass.MEASUREMENT),
+        ATTR_CPU: ("CPU Usage", PERCENTAGE, "mdi:cpu-64-bit", SensorStateClass.MEASUREMENT),
+        ATTR_UPTIME: ("Uptime", UnitOfTime.SECONDS, "mdi:timer-outline", SensorStateClass.MEASUREMENT),
         # Rate sensors (rounded to whole units by coordinators)
-        "req_per_hour": ("Requests per Hour (last hour)", "req/h", "mdi:chart-line", SensorStateClass.MEASUREMENT),
-        "req_per_day": ("Requests per Day (last 24h)", "req/d", "mdi:chart-areaspline", SensorStateClass.MEASUREMENT),
-        "security_status": ("Security Status", None, "mdi:shield-check-outline", None),
+        ATTR_REQ_PER_HOUR: ("Requests per Hour (last hour)", "req/h", "mdi:chart-line", SensorStateClass.MEASUREMENT),
+        ATTR_REQ_PER_DAY: (
+            "Requests per Day (last 24h)", "req/d", "mdi:chart-areaspline", SensorStateClass.MEASUREMENT
+        ),
+        ATTR_SECURITY_STATUS: ("Security Status", None, "mdi:shield-check-outline", None),
     }
 
     for key, (label, unit, icon, state_class) in metric_map.items():

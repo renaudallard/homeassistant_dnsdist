@@ -18,10 +18,21 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
+    ATTR_CACHE_HITS,
+    ATTR_CACHE_HITRATE,
+    ATTR_CACHE_MISSES,
+    ATTR_CPU,
+    ATTR_DOWNSTREAM_ERRORS,
+    ATTR_DROPS,
     ATTR_DYNAMIC_RULES,
     ATTR_FILTERING_RULES,
+    ATTR_QUERIES,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
+    ATTR_RESPONSES,
+    ATTR_RULE_DROP,
+    ATTR_SECURITY_STATUS,
+    ATTR_UPTIME,
     DOMAIN,
     SECURITY_STATUS_MAP,
     STORAGE_KEY_HISTORY,
@@ -148,7 +159,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                     delta_time = now_mono - self._last_update_ts
                     if delta_time > 0 and delta_cpu >= 0:
                         cpu_percent = ((delta_cpu / 1000.0) / delta_time) * 100
-                        normalized["cpu"] = round(max(0.0, min(cpu_percent, 100.0)), 2)
+                        normalized[ATTR_CPU] = round(max(0.0, min(cpu_percent, 100.0)), 2)
                 self._last_cpu_user_msec = int(cpu_user_msec)
                 self._last_update_ts = now_mono
         except Exception as err:
@@ -157,7 +168,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         # --- Compute rolling-window request rates (rounded to unit) ---
         try:
             now_ts = time.time()
-            q = int(normalized.get("queries", 0))
+            q = int(normalized.get(ATTR_QUERIES, 0))
             history_changed = False
             # Reset history if counter went backwards (service restart)
             if self._history and q < self._history[-1][1]:
@@ -231,21 +242,20 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
 
     def _zero_data(self) -> dict[str, Any]:
         return {
-            "queries": 0,
-            "responses": 0,
-            "drops": 0,
-            "rule_drop": 0,
-            "downstream_errors": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "cacheHit": 0,
-            "cpu": 0.0,
+            ATTR_QUERIES: 0,
+            ATTR_RESPONSES: 0,
+            ATTR_DROPS: 0,
+            ATTR_RULE_DROP: 0,
+            ATTR_DOWNSTREAM_ERRORS: 0,
+            ATTR_CACHE_HITS: 0,
+            ATTR_CACHE_MISSES: 0,
+            ATTR_CACHE_HITRATE: 0,
+            ATTR_CPU: 0.0,
             "cpu_user_msec": 0,
-            "uptime": 0,
-            "security_status": "unknown",
-            # new rates as integers
-            "req_per_hour": 0,
-            "req_per_day": 0,
+            ATTR_UPTIME: 0,
+            ATTR_SECURITY_STATUS: "unknown",
+            ATTR_REQ_PER_HOUR: 0,
+            ATTR_REQ_PER_DAY: 0,
             ATTR_FILTERING_RULES: {},
             ATTR_DYNAMIC_RULES: {},
         }
@@ -261,33 +271,33 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                 val = item.get("value")
 
                 if key == "queries":
-                    normalized["queries"] = int(val)
+                    normalized[ATTR_QUERIES] = int(val)
                 elif key == "responses":
-                    normalized["responses"] = int(val)
+                    normalized[ATTR_RESPONSES] = int(val)
                 elif key == "drops":
-                    normalized["drops"] = int(val)
+                    normalized[ATTR_DROPS] = int(val)
                 elif key in ("rule-drop", "rule_drop"):
-                    normalized["rule_drop"] = int(val)
+                    normalized[ATTR_RULE_DROP] = int(val)
                 elif key in ("downstream-send-errors", "downstream_errors"):
-                    normalized["downstream_errors"] = int(val)
+                    normalized[ATTR_DOWNSTREAM_ERRORS] = int(val)
                 elif key in ("cache-hits", "cache_hits"):
-                    normalized["cache_hits"] = int(val)
+                    normalized[ATTR_CACHE_HITS] = int(val)
                 elif key in ("cache-misses", "cache_misses"):
-                    normalized["cache_misses"] = int(val)
+                    normalized[ATTR_CACHE_MISSES] = int(val)
                 elif key in ("uptime",):
-                    normalized["uptime"] = int(val)
+                    normalized[ATTR_UPTIME] = int(val)
                 elif key in ("cpu-user-msec", "cpu_user_msec"):
                     normalized["cpu_user_msec"] = int(val)
                 elif key in ("security-status", "security_status"):
                     sec = int(val)
-                    normalized["security_status"] = SECURITY_STATUS_MAP.get(sec, "unknown")
+                    normalized[ATTR_SECURITY_STATUS] = SECURITY_STATUS_MAP.get(sec, "unknown")
 
-            # Compute cache hit % (rounded to 0 decimals to match % as integer? keep 2 decimals if you prefer)
-            hits = normalized["cache_hits"]
-            misses = normalized["cache_misses"]
+            # Compute cache hit %
+            hits = normalized[ATTR_CACHE_HITS]
+            misses = normalized[ATTR_CACHE_MISSES]
             denom = hits + misses
             if denom > 0:
-                normalized["cacheHit"] = round((hits / denom) * 100, 2)
+                normalized[ATTR_CACHE_HITRATE] = round((hits / denom) * 100, 2)
         except Exception as err:
             _LOGGER.warning("[%s] Failed to normalize data: %s", self._name, err)
 

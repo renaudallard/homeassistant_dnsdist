@@ -14,10 +14,21 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
+    ATTR_CACHE_HITS,
+    ATTR_CACHE_HITRATE,
+    ATTR_CACHE_MISSES,
+    ATTR_CPU,
+    ATTR_DOWNSTREAM_ERRORS,
+    ATTR_DROPS,
     ATTR_DYNAMIC_RULES,
     ATTR_FILTERING_RULES,
+    ATTR_QUERIES,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
+    ATTR_RESPONSES,
+    ATTR_RULE_DROP,
+    ATTR_SECURITY_STATUS,
+    ATTR_UPTIME,
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
     STORAGE_KEY_HISTORY,
@@ -90,13 +101,13 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                 return self._last_data
 
             totals = {
-                "queries": 0,
-                "responses": 0,
-                "drops": 0,
-                "rule_drop": 0,
-                "downstream_errors": 0,
-                "cache_hits": 0,
-                "cache_misses": 0,
+                ATTR_QUERIES: 0,
+                ATTR_RESPONSES: 0,
+                ATTR_DROPS: 0,
+                ATTR_RULE_DROP: 0,
+                ATTR_DOWNSTREAM_ERRORS: 0,
+                ATTR_CACHE_HITS: 0,
+                ATTR_CACHE_MISSES: 0,
             }
             cpu_values: list[float] = []
             uptime_values: list[int] = []
@@ -109,18 +120,18 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                 for k in totals:
                     totals[k] += int(d.get(k, 0) or 0)
 
-                cpu_val = d.get("cpu")
+                cpu_val = d.get(ATTR_CPU)
                 try:
                     if cpu_val is not None:
                         cpu_values.append(float(cpu_val))
                 except (ValueError, TypeError):
                     _LOGGER.debug("[%s] Skipping invalid CPU value from %s: %s", self._name, c._name, cpu_val)
 
-                uptime = d.get("uptime")
+                uptime = d.get(ATTR_UPTIME)
                 if isinstance(uptime, (int, float)):
                     uptime_values.append(int(uptime))
 
-                sec = str(d.get("security_status", "unknown")).lower()
+                sec = str(d.get(ATTR_SECURITY_STATUS, "unknown")).lower()
                 sec_values.append(sec)
 
                 rules = d.get(ATTR_FILTERING_RULES)
@@ -195,14 +206,14 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
 
             aggregated = {
                 **totals,
-                "cacheHit": round(
-                    (totals["cache_hits"] / (totals["cache_hits"] + totals["cache_misses"])) * 100, 2
+                ATTR_CACHE_HITRATE: round(
+                    (totals[ATTR_CACHE_HITS] / (totals[ATTR_CACHE_HITS] + totals[ATTR_CACHE_MISSES])) * 100, 2
                 )
-                if (totals["cache_hits"] + totals["cache_misses"]) > 0
+                if (totals[ATTR_CACHE_HITS] + totals[ATTR_CACHE_MISSES]) > 0
                 else 0.0,
-                "cpu": avg_cpu,
-                "uptime": max_uptime,
-                "security_status": sec_status,
+                ATTR_CPU: avg_cpu,
+                ATTR_UPTIME: max_uptime,
+                ATTR_SECURITY_STATUS: sec_status,
             }
 
             if aggregated_rules:
@@ -218,7 +229,7 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
             # --- Rolling-window request totals for the group ---
             try:
                 now_ts = time.time()
-                q_total = int(aggregated["queries"])
+                q_total = int(aggregated[ATTR_QUERIES])
                 history_changed = False
                 if self._history and q_total < self._history[-1][1]:
                     self._history.clear()
@@ -280,19 +291,19 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
     def _zero_data(self) -> dict[str, Any]:
         """Provide a valid zeroed dataset so sensors stay available."""
         return {
-            "queries": 0,
-            "responses": 0,
-            "drops": 0,
-            "rule_drop": 0,
-            "downstream_errors": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "cacheHit": 0.0,
-            "cpu": 0.0,
-            "uptime": 0,
-            "security_status": "unknown",
-            "req_per_hour": 0,
-            "req_per_day": 0,
+            ATTR_QUERIES: 0,
+            ATTR_RESPONSES: 0,
+            ATTR_DROPS: 0,
+            ATTR_RULE_DROP: 0,
+            ATTR_DOWNSTREAM_ERRORS: 0,
+            ATTR_CACHE_HITS: 0,
+            ATTR_CACHE_MISSES: 0,
+            ATTR_CACHE_HITRATE: 0.0,
+            ATTR_CPU: 0.0,
+            ATTR_UPTIME: 0,
+            ATTR_SECURITY_STATUS: "unknown",
+            ATTR_REQ_PER_HOUR: 0,
+            ATTR_REQ_PER_DAY: 0,
             ATTR_FILTERING_RULES: {},
             ATTR_DYNAMIC_RULES: {},
         }
