@@ -1,6 +1,5 @@
 """Tests for utility functions."""
 
-import pytest
 
 from custom_components.dnsdist.utils import (
     coerce_int,

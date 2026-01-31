@@ -24,24 +24,11 @@ CONF_IS_GROUP = "is_group"
 CONF_INCLUDE_FILTER_SENSORS = "include_filter_sensors"
 CONF_REMOVE_DISABLED_FILTER_SENSORS = "remove_filter_sensors_on_disable"
 
-# Attribute names / normalized stat keys
-ATTR_QUERIES = "queries"
-ATTR_RESPONSES = "responses"
-ATTR_DROPS = "drops"
-ATTR_RULE_DROP = "rule_drop"
-ATTR_CACHE_HITS = "cache_hits"
-ATTR_CACHE_MISSES = "cache_misses"
-ATTR_CACHE_HITRATE = "cacheHit"
-ATTR_CPU = "cpu"
-ATTR_UPTIME = "uptime"
-ATTR_DOWNSTREAM_ERRORS = "downstream_errors"
-ATTR_SECURITY_STATUS = "security_status"
+# Attribute names for complex data structures
 ATTR_FILTERING_RULES = "filtering_rules"
 ATTR_DYNAMIC_RULES = "dynamic_rules"
-
-# New computed rate metrics
-ATTR_REQ_PER_HOUR = "req_per_hour"  # requests/hour over last hour (normalized)
-ATTR_REQ_PER_DAY = "req_per_day"    # requests/day over last 24h (normalized)
+ATTR_REQ_PER_HOUR = "req_per_hour"
+ATTR_REQ_PER_DAY = "req_per_day"
 
 # Storage helpers
 STORAGE_VERSION = 1

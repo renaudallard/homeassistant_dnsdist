@@ -23,23 +23,6 @@ _LOGGER = logging.getLogger(__name__)
 SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 
 
-def slugify(value: Any, fallback: str = "unknown") -> str:
-    """Convert a value to a URL-safe slug.
-
-    Args:
-        value: The value to slugify.
-        fallback: Default slug if value produces empty result.
-
-    Returns:
-        A lowercase alphanumeric slug with hyphens.
-    """
-    base = str(value or "").lower()
-    base = SLUG_PATTERN.sub("-", base).strip("-")
-    if not base:
-        base = fallback
-    return base
-
-
 def slugify_rule(value: Any) -> str:
     """Slugify a filtering rule name with hash fallback."""
     base = str(value or "").lower()
