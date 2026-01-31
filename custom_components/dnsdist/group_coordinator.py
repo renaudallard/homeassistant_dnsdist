@@ -34,7 +34,7 @@ from .const import (
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
-from .utils import HistoryMixin, coerce_int, compute_window_total, slugify_rule
+from .utils import HistoryMixin, coerce_int, make_zero_data, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -230,51 +230,10 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
             try:
                 now_ts = time.time()
                 q_total = int(aggregated[ATTR_QUERIES])
-                history_changed = False
-                if self._history and q_total < self._history[-1][1]:
-                    self._history.clear()
-                self._history.append((now_ts, q_total))
-                history_changed = True
-                cutoff_24h = now_ts - 86400
-                while self._history and self._history[0][0] < cutoff_24h:
-                    self._history.popleft()
-                    history_changed = True
-
-                if history_changed:
-                    self._history_dirty = True
-
-                # Compute requests observed in trailing windows
-                # For hourly rate, extrapolate from available history if less than 1h
-                if self._history:
-                    oldest_ts = self._history[0][0]
-                    history_span = now_ts - oldest_ts
-                    if history_span >= 3600:
-                        # Full 1h of data available
-                        aggregated[ATTR_REQ_PER_HOUR] = compute_window_total(self._history, now_ts, 3600, q_total)
-                    elif history_span > 0:
-                        # Extrapolate from available data
-                        observed = q_total - self._history[0][1]
-                        aggregated[ATTR_REQ_PER_HOUR] = int((observed / history_span) * 3600)
-                    else:
-                        aggregated[ATTR_REQ_PER_HOUR] = 0
-                else:
-                    aggregated[ATTR_REQ_PER_HOUR] = 0
-
-                # For daily rate, extrapolate from available history if less than 24h
-                if self._history:
-                    oldest_ts = self._history[0][0]
-                    history_span = now_ts - oldest_ts
-                    if history_span >= 86400:
-                        # Full 24h of data available
-                        aggregated[ATTR_REQ_PER_DAY] = compute_window_total(self._history, now_ts, 86400, q_total)
-                    elif history_span > 0:
-                        # Extrapolate from available data
-                        observed = q_total - self._history[0][1]
-                        aggregated[ATTR_REQ_PER_DAY] = int((observed / history_span) * 86400)
-                    else:
-                        aggregated[ATTR_REQ_PER_DAY] = 0
-                else:
-                    aggregated[ATTR_REQ_PER_DAY] = 0
+                self._update_history(now_ts, q_total)
+                req_hour, req_day = self._compute_rates(now_ts, q_total)
+                aggregated[ATTR_REQ_PER_HOUR] = req_hour
+                aggregated[ATTR_REQ_PER_DAY] = req_day
             except Exception as err:
                 _LOGGER.debug("[%s] Group rate computation failed: %s", self._name, err)
 
@@ -290,20 +249,4 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
 
     def _zero_data(self) -> dict[str, Any]:
         """Provide a valid zeroed dataset so sensors stay available."""
-        return {
-            ATTR_QUERIES: 0,
-            ATTR_RESPONSES: 0,
-            ATTR_DROPS: 0,
-            ATTR_RULE_DROP: 0,
-            ATTR_DOWNSTREAM_ERRORS: 0,
-            ATTR_CACHE_HITS: 0,
-            ATTR_CACHE_MISSES: 0,
-            ATTR_CACHE_HITRATE: 0.0,
-            ATTR_CPU: 0.0,
-            ATTR_UPTIME: 0,
-            ATTR_SECURITY_STATUS: "unknown",
-            ATTR_REQ_PER_HOUR: 0,
-            ATTR_REQ_PER_DAY: 0,
-            ATTR_FILTERING_RULES: {},
-            ATTR_DYNAMIC_RULES: {},
-        }
+        return make_zero_data()

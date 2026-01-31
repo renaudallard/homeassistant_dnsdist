@@ -15,7 +15,25 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import DOMAIN, STORAGE_KEY_HISTORY
+from .const import (
+    ATTR_CACHE_HITS,
+    ATTR_CACHE_HITRATE,
+    ATTR_CACHE_MISSES,
+    ATTR_CPU,
+    ATTR_DOWNSTREAM_ERRORS,
+    ATTR_DROPS,
+    ATTR_DYNAMIC_RULES,
+    ATTR_FILTERING_RULES,
+    ATTR_QUERIES,
+    ATTR_REQ_PER_DAY,
+    ATTR_REQ_PER_HOUR,
+    ATTR_RESPONSES,
+    ATTR_RULE_DROP,
+    ATTR_SECURITY_STATUS,
+    ATTR_UPTIME,
+    DOMAIN,
+    STORAGE_KEY_HISTORY,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,6 +94,27 @@ def build_device_info(coordinator: DataUpdateCoordinator[Any], is_group: bool) -
         info["configuration_url"] = f"{proto}://{coordinator._host}:{coordinator._port}"
 
     return info
+
+
+def make_zero_data() -> dict[str, Any]:
+    """Create a zeroed data dictionary for coordinators."""
+    return {
+        ATTR_QUERIES: 0,
+        ATTR_RESPONSES: 0,
+        ATTR_DROPS: 0,
+        ATTR_RULE_DROP: 0,
+        ATTR_DOWNSTREAM_ERRORS: 0,
+        ATTR_CACHE_HITS: 0,
+        ATTR_CACHE_MISSES: 0,
+        ATTR_CACHE_HITRATE: 0.0,
+        ATTR_CPU: 0.0,
+        ATTR_UPTIME: 0,
+        ATTR_SECURITY_STATUS: "unknown",
+        ATTR_REQ_PER_HOUR: 0,
+        ATTR_REQ_PER_DAY: 0,
+        ATTR_FILTERING_RULES: {},
+        ATTR_DYNAMIC_RULES: {},
+    }
 
 
 def compute_window_total(
@@ -212,3 +251,53 @@ class HistoryMixin:
             self._last_history_persist = monotonic()
         except Exception as err:
             _LOGGER.debug("[%s] Failed to save history: %s", self._name, err)
+
+    def _update_history(self, now_ts: float, query_count: int) -> None:
+        """Update history with new data point and trim old entries.
+
+        Resets history if counter went backwards (service restart).
+        Trims entries older than 24 hours.
+        """
+        # Reset history if counter went backwards (service restart)
+        if self._history and query_count < self._history[-1][1]:
+            self._history.clear()
+
+        self._history.append((now_ts, query_count))
+        self._history_dirty = True
+
+        # Trim to last 24h
+        cutoff_24h = now_ts - 86400
+        while self._history and self._history[0][0] < cutoff_24h:
+            self._history.popleft()
+
+    def _compute_rates(self, now_ts: float, query_count: int) -> tuple[int, int]:
+        """Compute hourly and daily request rates with extrapolation.
+
+        Returns:
+            Tuple of (req_per_hour, req_per_day).
+        """
+        if not self._history:
+            return 0, 0
+
+        oldest_ts = self._history[0][0]
+        history_span = now_ts - oldest_ts
+
+        # Hourly rate
+        if history_span >= 3600:
+            req_per_hour = compute_window_total(self._history, now_ts, 3600, query_count)
+        elif history_span > 0:
+            observed = query_count - self._history[0][1]
+            req_per_hour = int((observed / history_span) * 3600)
+        else:
+            req_per_hour = 0
+
+        # Daily rate
+        if history_span >= 86400:
+            req_per_day = compute_window_total(self._history, now_ts, 86400, query_count)
+        elif history_span > 0:
+            observed = query_count - self._history[0][1]
+            req_per_day = int((observed / history_span) * 86400)
+        else:
+            req_per_day = 0
+
+        return req_per_hour, req_per_day
