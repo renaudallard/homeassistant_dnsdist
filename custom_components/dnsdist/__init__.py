@@ -211,10 +211,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except Exception as err:
-        _LOGGER.warning("[dnsdist] Initial refresh failed for '%s': %s", name, err)
+    await coordinator.async_config_entry_first_refresh()
 
     # Forward platforms (now includes BUTTON)
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.BUTTON])
