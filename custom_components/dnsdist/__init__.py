@@ -105,15 +105,14 @@ async def _async_register_lovelace_module(hass: HomeAssistant, lovelace: Any) ->
     """Register the card module in Lovelace resources."""
     from homeassistant.loader import async_get_integration
 
+    url_base = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}"
+
     # Get integration version for cache busting
     try:
         integration = await async_get_integration(hass, DOMAIN)
-        version = integration.version
+        url_with_version = f"{url_base}?v={integration.version}"
     except Exception:
-        version = "1.2.1"
-
-    url_with_version = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}?v={version}"
-    url_base = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}"
+        url_with_version = url_base
 
     try:
         resources = lovelace.resources
