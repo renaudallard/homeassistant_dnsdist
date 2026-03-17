@@ -8,11 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, CoreState, callback
+from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_call_later
 from homeassistant.components.http import StaticPathConfig
 
 from .const import (
@@ -93,14 +92,12 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     mode = getattr(lovelace, "resource_mode", None) or getattr(lovelace, "mode", None)
     if mode != "storage":
         _LOGGER.info(
-            "[dnsdist] Lovelace in YAML mode. Add resource manually: "
-            "url: %s/%s, type: module",
+            "[dnsdist] Lovelace in YAML mode. Add resource manually: url: %s/%s, type: module",
             FRONTEND_URL_BASE,
             FRONTEND_CARD_FILENAME,
         )
         return
 
-    # Wait for lovelace resources to be loaded
     await _async_register_lovelace_module(hass, lovelace)
 
 
@@ -118,31 +115,26 @@ async def _async_register_lovelace_module(hass: HomeAssistant, lovelace: Any) ->
     url_with_version = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}?v={version}"
     url_base = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}"
 
-    @callback
-    def _check_resources_loaded(_now: Any = None) -> None:
-        """Check if resources are loaded and register."""
-        if not lovelace.resources.loaded:
-            _LOGGER.debug("[dnsdist] Lovelace resources not loaded yet, retrying...")
-            async_call_later(hass, 5, _check_resources_loaded)
-            return
-
-        hass.async_create_task(_do_register_module(lovelace, url_base, url_with_version))
-
-    _check_resources_loaded()
-
-
-async def _do_register_module(lovelace: Any, url_base: str, url_with_version: str) -> None:
-    """Actually register or update the module."""
     try:
+        resources = lovelace.resources
+
+        # ResourceStorageCollection defers loading from disk; async_items()
+        # returns empty on an unloaded collection and async_create_item()
+        # would then overwrite the storage file, destroying all existing
+        # Lovelace resources.  Force-load here instead of polling.
+        if hasattr(resources, "loaded") and not resources.loaded:
+            await resources.async_load()
+            resources.loaded = True
+
         # Check existing resources
-        for resource in lovelace.resources.async_items():
+        for resource in resources.async_items():
             existing_url = resource.get("url", "")
             # Check if our resource exists (with or without version)
             if existing_url.split("?")[0] == url_base:
                 # Already registered, check if version update needed
                 if existing_url != url_with_version:
                     _LOGGER.info("[dnsdist] Updating dnsdist-card to new version")
-                    await lovelace.resources.async_update_item(
+                    await resources.async_update_item(
                         resource["id"],
                         {"res_type": "module", "url": url_with_version},
                     )
@@ -151,9 +143,7 @@ async def _do_register_module(lovelace: Any, url_base: str, url_with_version: st
                 return
 
         # Not registered, create new
-        await lovelace.resources.async_create_item(
-            {"res_type": "module", "url": url_with_version}
-        )
+        await resources.async_create_item({"res_type": "module", "url": url_with_version})
         _LOGGER.info("[dnsdist] Registered dnsdist-card as Lovelace resource")
 
     except Exception as err:
