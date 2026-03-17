@@ -54,7 +54,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     async def _setup_frontend(_event: Any = None) -> None:
         await _async_register_frontend(hass)
 
-    if hass.state == CoreState.running:
+    if hass.state is CoreState.running:
         await _setup_frontend()
     else:
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _setup_frontend)
