@@ -191,11 +191,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         use_https = bool(data.get(CONF_USE_HTTPS, False))
         verify_ssl = bool(data.get(CONF_VERIFY_SSL, True))
 
-        api_key: str | None = None
-        try:
-            api_key = await entry.async_get_secret(CONF_API_KEY)
-        except AttributeError:
-            api_key = data.get(CONF_API_KEY)
+        api_key = data.get(CONF_API_KEY)
 
         coordinator = DnsdistCoordinator(
             hass,
@@ -238,7 +234,7 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old entries to new format with secure secret storage."""
+    """Migrate old entries to current config version."""
     data = dict(entry.data)
     ver = entry.version or 1
     changed = False
@@ -246,21 +242,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if ver < 4:
         ver = 4
         changed = True
-
-    if data.get(CONF_API_KEY):
-        try:
-            api_key = data[CONF_API_KEY]
-            entry.add_secret(CONF_API_KEY, api_key)
-            data[CONF_API_KEY] = None
-            _LOGGER.info("[dnsdist] Migrated API key for '%s' to secure storage", entry.title)
-            changed = True
-        except AttributeError:
-            _LOGGER.warning(
-                "[dnsdist] Secure secret API not available; keeping plaintext API key for '%s'.",
-                entry.title,
-            )
-        except Exception as err:
-            _LOGGER.warning("[dnsdist] Could not migrate API key for '%s': %s", entry.title, err)
 
     if changed:
         hass.config_entries.async_update_entry(entry, data=data, version=ver)
