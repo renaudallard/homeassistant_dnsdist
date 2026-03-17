@@ -89,7 +89,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         _LOGGER.warning("[dnsdist] Lovelace not available, cannot register card resource")
         return
 
-    mode = getattr(lovelace, "resource_mode", None) or getattr(lovelace, "mode", None)
+    mode = getattr(lovelace, "resource_mode", None)
     if mode != "storage":
         _LOGGER.info(
             "[dnsdist] Lovelace in YAML mode. Add resource manually: url: %s/%s, type: module",
