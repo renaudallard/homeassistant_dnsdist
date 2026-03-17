@@ -62,7 +62,7 @@
   - `uptime` as seconds (`device_class=duration`, `MEASUREMENT`)
   - `security_status` with rich attributes
   - `req_per_hour` / `req_per_day` as integer rolling windows
-- **Secure by default** with HTTPS, SSL verification, and encrypted API key storage (uses HA’s secret store when available).
+- **Secure by default** with HTTPS and SSL verification.
 - **Diagnostics bundle** that automatically redacts sensitive data.
 - **REST-only services** (`clear_cache`, `enable_server`, `disable_server`, `get_backends`) and a **Clear Cache** device button for both hosts and groups.
 
@@ -89,7 +89,7 @@
 - **Name:** Display name for Home Assistant
 - **Host / Port:** dnsdist API endpoint (default port `8083`)
 - **Host validation:** Enforces RFC 1123 hostnames plus IPv4/IPv6 literals, catching typos before the connection test
-- **API Key:** Optional; securely stored when supported
+- **API Key:** Optional
 - **Use HTTPS / Verify SSL:** Toggle TLS and certificate validation
 - **Update interval (s):** Polling frequency (default `30`)
 - **Include filtering rule sensors:** Disabled by default; enable to expose per-rule sensors
