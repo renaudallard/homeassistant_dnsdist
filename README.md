@@ -1,6 +1,6 @@
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.4.0-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.4.1-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -38,7 +38,7 @@
 | --- | --- |
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.4.0** |
+| **Current version** | **1.4.1** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [MIT](LICENSE) |
@@ -153,7 +153,7 @@ The integration includes a custom Lovelace card for displaying dnsdist metrics i
 The card is automatically registered when the integration loads. If needed, you can manually add the resource:
 
 1. Go to **Settings → Dashboards → Resources**
-2. Add `/dnsdist_static/dnsdist-card.js?v=1.4.0` as a JavaScript Module
+2. Add `/dnsdist_static/dnsdist-card.js?v=1.4.1` as a JavaScript Module
 
 ### Usage
 
@@ -303,6 +303,10 @@ custom_components/dnsdist/
 ---
 
 ## 📝 Changelog <a id="changelog"></a>
+
+### 1.4.1
+- Add reconfigure flow to change host, port, API key, and SSL settings without removing the entry
+- Log descriptive message for request timeouts instead of empty string
 
 ### 1.4.0
 - Add local `brand/` directory with `icon.png` and `logo.png` for HA 2026.3+ custom integration branding
