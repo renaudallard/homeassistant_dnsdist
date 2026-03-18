@@ -11,7 +11,7 @@
 [![Ruff](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/ruff.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/ruff.yml)
 [![Tests](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/tests.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/tests.yml)
 [![Type Check](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/mypy.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/mypy.yml)
-[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![BSD 2-Clause](https://img.shields.io/badge/license-BSD--2--Clause-green.svg)](LICENSE)
 
 A secure, high-performance bridge between **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.
 Monitor every proxy, surface aggregated insights, and control dnsdist safely through REST-only actions.
@@ -27,7 +27,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 | **Current version** | **1.4.1** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
-| **License** | [MIT](LICENSE) |
+| **License** | [BSD 2-Clause](LICENSE) |
 
 ---
 
@@ -360,4 +360,4 @@ custom_components/dnsdist/
 
 ## License
 
-**MIT** -- see [`LICENSE`](LICENSE).
+**BSD 2-Clause** -- see [`LICENSE`](LICENSE).
