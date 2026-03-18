@@ -282,6 +282,9 @@ custom_components/dnsdist/
   translations/
     en.json
   services.yaml
+  brand/                       # Local brand assets (HA 2026.3+)
+    icon.png
+    logo.png
   frontend/                    # Lovelace card source
     package.json
     tsconfig.json
