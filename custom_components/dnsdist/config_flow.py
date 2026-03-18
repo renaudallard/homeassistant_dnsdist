@@ -85,10 +85,7 @@ def validate_host(host: str) -> str:
     if _HOSTNAME_PATTERN.match(host):
         return host
 
-    raise vol.Invalid(
-        f"Invalid host format: '{host}'. "
-        "Must be a valid hostname, IPv4 address, or IPv6 address"
-    )
+    raise vol.Invalid(f"Invalid host format: '{host}'. Must be a valid hostname, IPv4 address, or IPv6 address")
 
 
 async def _validate_connection(
@@ -120,10 +117,7 @@ async def _validate_connection(
                 try:
                     data = await resp.json()
                 except Exception as json_err:
-                    _LOGGER.warning(
-                        "dnsdist API response is not valid JSON for %s:%s: %s",
-                        host, port, json_err
-                    )
+                    _LOGGER.warning("dnsdist API response is not valid JSON for %s:%s: %s", host, port, json_err)
                     return False
 
                 # Verify this is a dnsdist statistics response
@@ -132,24 +126,17 @@ async def _validate_connection(
 
                 if isinstance(data, list):
                     # List format: [{"name": "queries", "value": 123}, ...]
-                    found_fields = {
-                        item.get("name") for item in data
-                        if isinstance(item, dict) and "name" in item
-                    }
+                    found_fields = {item.get("name") for item in data if isinstance(item, dict) and "name" in item}
                 elif isinstance(data, dict):
                     # Dict format: {"queries": 123, ...} or {"statistics": [...]}
                     if "statistics" in data and isinstance(data["statistics"], list):
                         found_fields = {
-                            item.get("name") for item in data["statistics"]
-                            if isinstance(item, dict) and "name" in item
+                            item.get("name") for item in data["statistics"] if isinstance(item, dict) and "name" in item
                         }
                     else:
                         found_fields = set(data.keys())
                 else:
-                    _LOGGER.warning(
-                        "dnsdist API response has unexpected type for %s:%s",
-                        host, port
-                    )
+                    _LOGGER.warning("dnsdist API response has unexpected type for %s:%s", host, port)
                     return False
 
                 missing_fields = required_fields - found_fields
@@ -157,14 +144,17 @@ async def _validate_connection(
                     _LOGGER.warning(
                         "dnsdist API response missing required fields %s for %s:%s. "
                         "This may not be a dnsdist endpoint.",
-                        missing_fields, host, port
+                        missing_fields,
+                        host,
+                        port,
                     )
                     return False
 
                 _LOGGER.debug(
-                    "dnsdist connection validated successfully for %s:%s "
-                    "(found %d statistics fields)",
-                    host, port, len(data)
+                    "dnsdist connection validated successfully for %s:%s (found %d statistics fields)",
+                    host,
+                    port,
+                    len(data),
                 )
                 return True
 
@@ -204,8 +194,13 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Keys expected in this step's form
         expected_keys = {
-            CONF_NAME, CONF_HOST, CONF_PORT, CONF_API_KEY,
-            CONF_USE_HTTPS, CONF_VERIFY_SSL, CONF_UPDATE_INTERVAL,
+            CONF_NAME,
+            CONF_HOST,
+            CONF_PORT,
+            CONF_API_KEY,
+            CONF_USE_HTTPS,
+            CONF_VERIFY_SSL,
+            CONF_UPDATE_INTERVAL,
             CONF_INCLUDE_FILTER_SENSORS,
         }
 
@@ -271,7 +266,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_NAME: name,
             CONF_HOST: host,
             CONF_PORT: port,
-            CONF_API_KEY: api_key,            # keep for now; may be migrated to secret later
+            CONF_API_KEY: api_key,  # keep for now; may be migrated to secret later
             CONF_USE_HTTPS: use_https,
             CONF_VERIFY_SSL: verify_ssl,
             CONF_UPDATE_INTERVAL: update_interval,
@@ -302,9 +297,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             group_name = user_input[CONF_NAME]
             members = user_input.get(CONF_MEMBERS, [])
             update_interval = user_input.get(CONF_UPDATE_INTERVAL, 30)
-            include_filter_sensors = bool(
-                user_input.get(CONF_INCLUDE_FILTER_SENSORS, True)
-            )
+            include_filter_sensors = bool(user_input.get(CONF_INCLUDE_FILTER_SENSORS, True))
 
             if not members:
                 errors["base"] = "no_members"
@@ -332,8 +325,69 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(step_id="add_group", data_schema=schema, errors=errors)
 
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
+        """Allow the user to reconfigure connection parameters."""
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        assert entry is not None
+        data = entry.data
+
+        if data.get(CONF_IS_GROUP):
+            return self.async_abort(reason="reconfigure_not_supported")
+
+        errors: dict[str, str] = {}
+
+        current_host = data.get(CONF_HOST, "")
+        current_port = data.get(CONF_PORT, 8083)
+        current_api_key = data.get(CONF_API_KEY) or ""
+        current_use_https = data.get(CONF_USE_HTTPS, False)
+        current_verify_ssl = data.get(CONF_VERIFY_SSL, True)
+
+        if user_input is not None:
+            try:
+                host = validate_host(user_input[CONF_HOST])
+            except vol.Invalid:
+                errors[CONF_HOST] = "invalid_host"
+            else:
+                port = user_input.get(CONF_PORT, current_port)
+                api_key = user_input.get(CONF_API_KEY, "") or None
+                use_https = user_input.get(CONF_USE_HTTPS, current_use_https)
+                verify_ssl = user_input.get(CONF_VERIFY_SSL, current_verify_ssl)
+
+                try:
+                    valid = await _validate_connection(self.hass, host, port, api_key, use_https, verify_ssl)
+                    if not valid:
+                        errors["base"] = "cannot_connect"
+                except Exception as err:
+                    _LOGGER.exception("Reconfigure connection validation failed: %s", err)
+                    errors["base"] = "cannot_connect"
+
+                if not errors:
+                    new_data = dict(data)
+                    new_data[CONF_HOST] = host
+                    new_data[CONF_PORT] = port
+                    new_data[CONF_API_KEY] = api_key
+                    new_data[CONF_USE_HTTPS] = use_https
+                    new_data[CONF_VERIFY_SSL] = verify_ssl
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data=new_data,
+                    )
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HOST, default=current_host): str,
+                vol.Required(CONF_PORT, default=current_port): vol.All(int, vol.Range(min=1, max=65535)),
+                vol.Optional(CONF_API_KEY, default=current_api_key): str,
+                vol.Optional(CONF_USE_HTTPS, default=current_use_https): bool,
+                vol.Optional(CONF_VERIFY_SSL, default=current_verify_ssl): bool,
+            }
+        )
+
+        return self.async_show_form(step_id="reconfigure", data_schema=schema, errors=errors)
+
     @staticmethod
     def async_get_options_flow(config_entry):
         """Return the options flow handler."""
         from .options_flow import DnsdistOptionsFlowHandler  # lazy import
+
         return DnsdistOptionsFlowHandler()
