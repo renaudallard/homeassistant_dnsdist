@@ -116,6 +116,10 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("[%s] Connection failed: %s", self._name, err)
             data = dict(self.data or self._zero_data())
             return data
+        except TimeoutError:
+            _LOGGER.warning("[%s] Request timed out after 10s", self._name)
+            data = dict(self.data or self._zero_data())
+            return data
         except Exception as err:
             _LOGGER.warning("[%s] Fetch error: %s", self._name, err)
             # Preserve last data to avoid sensor going unavailable

@@ -258,6 +258,7 @@ Visit **Settings → Devices & Services → PowerDNS dnsdist → ⋮ → Downloa
 - **Counters & Recorder** — Monotonic counters use `TOTAL_INCREASING` and the `count` unit, so long-term statistics stay healthy.
 - **Device page linking** — Host and group devices use unique `DeviceInfo.identifiers`, preventing cross-linking.
 - **Group shows “No active members yet”** — Normal until each member host completes its first refresh.
+- **Request timed out after 10s** — The dnsdist host did not respond within 10 seconds. Check that the host is reachable and the webserver is not overloaded.
 - **REST prerequisites on dnsdist** — Ensure the dnsdist webserver is enabled, has an API key, and allows your Home Assistant network in the ACL.
 
 ---
