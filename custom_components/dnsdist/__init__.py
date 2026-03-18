@@ -211,6 +211,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Forward platforms (now includes BUTTON)
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.BUTTON])
 
+    # Clean up dispatcher listener for group coordinators on unload
+    if is_group:
+        entry.async_on_unload(coordinator._unsub_dispatcher)
+
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
 
