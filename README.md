@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="custom_components/dnsdist/brand/logo.png" alt="PowerDNS dnsdist" width="120">
+</p>
+
 # PowerDNS **dnsdist** — Home Assistant Integration
 
 [![Release](https://img.shields.io/badge/version-1.4.1-blue.svg)](#changelog)
