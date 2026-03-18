@@ -7,7 +7,6 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import entity_registry as er
@@ -154,9 +153,3 @@ def _remove_filtering_rule_entities(hass, entry_id: str) -> None:
 
     for entity_id in to_remove:
         entity_registry.async_remove(entity_id)
-
-
-@callback
-def async_get_options_flow(config_entry: config_entries.ConfigEntry):
-    """Return the options flow handler."""
-    return DnsdistOptionsFlowHandler()
