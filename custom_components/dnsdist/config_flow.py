@@ -132,7 +132,7 @@ async def _validate_connection(
     try:
         ssl_context = False if not verify_ssl else None
         _LOGGER.debug("Requesting stats from %s (ssl=%s)", url, ssl_context)
-        async with timeout(5):
+        async with timeout(10):
             async with session.get(url, headers=headers, ssl=ssl_context) as resp:
                 if resp.status != 200:
                     _LOGGER.warning("dnsdist API returned HTTP %s for %s:%s", resp.status, host, port)
