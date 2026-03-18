@@ -251,7 +251,11 @@ custom_components/dnsdist/
 
 ### 1.4.1
 - Add reconfigure flow to change host, port, API key, and SSL settings without removing the entry
-- Log descriptive message for request timeouts instead of empty string
+- Fix empty "Fetch error:" log on timeout — `TimeoutError.str()` is empty in Python; now logs a proper message
+- Add 10s timeout to service API calls (clear_cache, enable/disable_server, get_backends) to prevent hanging
+- Use consistent 10s timeout in config flow connection validation (was 5s)
+- Cap rolling history deque to 24 hours of samples to prevent unbounded memory growth
+- Add comprehensive unit tests for coordinator normalization, group aggregation, and service encoding
 
 ### 1.4.0
 - Add local `brand/` directory with `icon.png` and `logo.png` for HA 2026.3+ custom integration branding
