@@ -102,8 +102,9 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         # Track CPU deltas
         self._last_cpu_user_msec: int | None = None
         self._last_update_ts: float | None = None
-        # Rolling history of (wallclock_ts, queries_counter) for rate sensors
-        self._history: Deque[Tuple[float, int]] = deque()  # seconds since epoch, queries
+        # Rolling history of (wallclock_ts, queries_counter) for rate sensors.
+        # Capped at 24 hours worth of samples to bound memory usage.
+        self._history: Deque[Tuple[float, int]] = deque(maxlen=(86400 // update_interval) + 1)
         self._history_dirty = False
         self._last_history_persist: float | None = None
         self._history_store = Store(

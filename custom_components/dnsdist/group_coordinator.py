@@ -87,7 +87,8 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
         self._entry_id = entry_id
         self._members = members or []
         self._last_data: dict[str, Any] = self._zero_data()
-        self._history: Deque[Tuple[float, int]] = deque()  # (ts, aggregated_queries)
+        # Capped at 24 hours worth of samples to bound memory usage.
+        self._history: Deque[Tuple[float, int]] = deque(maxlen=(86400 // update_interval) + 1)
         self._history_store = Store(
             hass,
             STORAGE_VERSION,
