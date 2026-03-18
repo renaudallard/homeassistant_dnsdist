@@ -43,6 +43,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
+    ATTR_BACKENDS,
     ATTR_CACHE_HITS,
     ATTR_CACHE_HITRATE,
     ATTR_CACHE_MISSES,
@@ -113,8 +114,8 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             f"{DOMAIN}_{entry_id}_{STORAGE_KEY_HISTORY}",
         )
         self._history_loaded = False
-        # Avoid hammering unsupported filtering rules endpoint with 404s
-        self._filtering_rules_supported: bool | None = None
+        # Avoid hammering unsupported endpoints with 404s
+        self._server_config_supported: bool | None = None
         self._dynamic_rules_supported: bool | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -179,6 +180,16 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         if previous_dynamic is not None and ATTR_DYNAMIC_RULES not in normalized:
             normalized[ATTR_DYNAMIC_RULES] = previous_dynamic
 
+        # Preserve backends similarly
+        previous_backends: dict[str, Any] | None = None
+        if isinstance(self.data, dict):
+            maybe_backends = self.data.get(ATTR_BACKENDS)
+            if isinstance(maybe_backends, dict):
+                previous_backends = maybe_backends
+
+        if previous_backends is not None and ATTR_BACKENDS not in normalized:
+            normalized[ATTR_BACKENDS] = previous_backends
+
         # --- Compute CPU % based on cpu-user-msec counter ---
         try:
             cpu_user_msec = normalized.get("cpu_user_msec")
@@ -209,11 +220,16 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         await self._async_save_history()
 
         try:
-            rules = await self._async_fetch_filtering_rules(session, headers)
-            if rules is not None:
-                normalized[ATTR_FILTERING_RULES] = rules
+            server_config = await self._async_fetch_server_config(session, headers)
+            if server_config is not None:
+                rules = self._parse_filtering_rules(server_config)
+                if rules is not None:
+                    normalized[ATTR_FILTERING_RULES] = rules
+                backends = self._parse_backends(server_config)
+                if backends is not None:
+                    normalized[ATTR_BACKENDS] = backends
         except Exception as err:
-            _LOGGER.debug("[%s] Filtering rules fetch failed: %s", self._name, err)
+            _LOGGER.debug("[%s] Server config fetch failed: %s", self._name, err)
 
         try:
             dynamic_rules = await self._async_fetch_dynamic_rules(session, headers)
@@ -272,65 +288,65 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
 
         return normalized
 
-    async def _async_fetch_filtering_rules(
+    async def _async_fetch_server_config(
         self, session: aiohttp.ClientSession, headers: dict[str, str]
-    ) -> dict[str, dict[str, Any]] | None:
-        """Fetch filtering rules and normalize them into a mapping."""
+    ) -> dict[str, Any] | None:
+        """Fetch full server config from /api/v1/servers/localhost."""
 
-        if self._filtering_rules_supported is False:
+        if self._server_config_supported is False:
             return None
 
         url = f"{self._base_url}/api/v1/servers/localhost"
-        payload: Any | None = None
 
         try:
             ssl_context = False if not self._verify_ssl else None
-            _LOGGER.debug("[%s] Requesting filtering rules from %s (ssl=%s)", self._name, url, ssl_context)
+            _LOGGER.debug("[%s] Requesting server config from %s (ssl=%s)", self._name, url, ssl_context)
             async with timeout(10):
                 async with session.get(url, headers=headers, ssl=ssl_context) as resp:
                     if resp.status == 404:
-                        if self._filtering_rules_supported is not False:
+                        if self._server_config_supported is not False:
                             _LOGGER.debug(
-                                "[%s] Filtering rules endpoint not available (404)",
+                                "[%s] Server config endpoint not available (404)",
                                 self._name,
                             )
-                        self._filtering_rules_supported = False
+                        self._server_config_supported = False
                         return None
                     if resp.status != 200:
                         raise ConnectionError(f"HTTP {resp.status}")
                     payload = await resp.json()
         except Exception as err:
-            _LOGGER.debug("[%s] Could not retrieve filtering rules: %s", self._name, err)
+            _LOGGER.debug("[%s] Could not retrieve server config: %s", self._name, err)
             return None
 
         if payload is None:
             return None
 
-        self._filtering_rules_supported = True
+        self._server_config_supported = True
+        return payload if isinstance(payload, dict) else None
 
+    def _parse_filtering_rules(self, payload: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
+        """Parse filtering rules from the server config response."""
         rules_raw: list[dict[str, Any]] = []
-        if isinstance(payload, list):
-            rules_raw = payload
-        elif isinstance(payload, dict):
-            # ``rules`` is the documented list of live filtering rules. Allow a few
-            # variations to support older or vendor-modified responses.
-            candidate_values: tuple[Any, ...] = (
-                payload.get("rules"),
-                payload.get("filteringRules"),
-                payload.get("filtering_rules"),
-            )
-            for candidate in candidate_values:
-                if isinstance(candidate, list):
-                    rules_raw = candidate
-                    break
-                if isinstance(candidate, dict):
-                    for nested_key in ("rules", "filteringRules", "data"):
-                        maybe = candidate.get(nested_key)
-                        if isinstance(maybe, list):
-                            rules_raw = maybe
-                            break
-                    if rules_raw:
+
+        # ``rules`` is the documented list of live filtering rules. Allow a few
+        # variations to support older or vendor-modified responses.
+        candidate_values: tuple[Any, ...] = (
+            payload.get("rules"),
+            payload.get("filteringRules"),
+            payload.get("filtering_rules"),
+        )
+        for candidate in candidate_values:
+            if isinstance(candidate, list):
+                rules_raw = candidate
+                break
+            if isinstance(candidate, dict):
+                for nested_key in ("rules", "filteringRules", "data"):
+                    maybe = candidate.get(nested_key)
+                    if isinstance(maybe, list):
+                        rules_raw = maybe
                         break
+                if rules_raw:
+                    break
 
         rules: dict[str, dict[str, Any]] = {}
         for item in rules_raw:
@@ -343,6 +359,52 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             rules[slug] = normalized
 
         return rules
+
+    def _parse_backends(self, payload: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
+        """Parse backend servers from the server config response."""
+        servers_raw = payload.get("servers")
+        if not isinstance(servers_raw, list):
+            return None
+
+        backends: dict[str, dict[str, Any]] = {}
+        for item in servers_raw:
+            if not isinstance(item, dict):
+                continue
+            normalized = self._normalize_backend(item)
+            if normalized is None:
+                continue
+            slug = normalized.pop("slug")
+            backends[slug] = normalized
+
+        return backends
+
+    def _normalize_backend(self, item: dict[str, Any]) -> dict[str, Any] | None:
+        """Normalize a backend server entry."""
+        address = str(item.get("address", "")).strip()
+        if not address:
+            return None
+
+        name = str(item.get("name", "")).strip()
+        slug_source = name or address
+        slug = slugify_rule(slug_source)
+
+        state = str(item.get("state", "")).lower()
+
+        return {
+            "slug": slug,
+            "address": address,
+            "name": name,
+            "state": state,
+            "queries": coerce_int(item.get("queries")),
+            "responses": coerce_int(item.get("responses")),
+            "drops": coerce_int(item.get("drops")),
+            "latency": float(item.get("latency", 0) or 0),
+            "order": coerce_int(item.get("order")),
+            "weight": coerce_int(item.get("weight")),
+            "pools": item.get("pools", []),
+            "qps": float(item.get("qps", 0) or 0),
+            "outstanding": coerce_int(item.get("outstanding")),
+        }
 
     def _normalize_filtering_rule(self, item: dict[str, Any]) -> dict[str, Any] | None:
         """Normalize a filtering rule entry."""

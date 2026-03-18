@@ -57,6 +57,7 @@ from .const import (
 # Pre-import the platforms so Home Assistant does not try to import them from within
 # the event loop while forwarding entry setups.  Importing them here during module
 # evaluation avoids the blocking `import_module` warning introduced in HA 2025.10.
+from . import binary_sensor  # noqa: F401  # pylint: disable=unused-import
 from . import button  # noqa: F401  # pylint: disable=unused-import
 from . import sensor  # noqa: F401  # pylint: disable=unused-import
 from .coordinator import DnsdistCoordinator
@@ -233,8 +234,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
-    # Forward platforms (now includes BUTTON)
-    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.BUTTON])
+    platforms = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.BUTTON]
+    await hass.config_entries.async_forward_entry_setups(entry, platforms)
 
     # Clean up dispatcher listener for group coordinators on unload
     if is_group:
@@ -246,7 +247,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a dnsdist entry."""
-    unloaded = await hass.config_entries.async_unload_platforms(entry, [Platform.SENSOR, Platform.BUTTON])
+    platforms = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.BUTTON]
+    unloaded = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)

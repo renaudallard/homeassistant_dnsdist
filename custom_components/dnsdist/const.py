@@ -67,6 +67,7 @@ ATTR_REQ_PER_DAY = "req_per_day"
 # Attribute names for complex data structures
 ATTR_FILTERING_RULES = "filtering_rules"
 ATTR_DYNAMIC_RULES = "dynamic_rules"
+ATTR_BACKENDS = "backends"
 
 # Storage helpers
 STORAGE_VERSION = 1
