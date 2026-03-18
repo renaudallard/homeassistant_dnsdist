@@ -49,6 +49,8 @@ async def async_get_system_diagnostics(hass: HomeAssistant) -> dict[str, Any]:
 
     system_info: dict[str, Any] = {}
     for entry_id, coordinator in all_entries.items():
+        if not hasattr(coordinator, "data"):
+            continue
         try:
             name = getattr(coordinator, "_name", entry_id)
             data = coordinator.data or {}
@@ -57,6 +59,6 @@ async def async_get_system_diagnostics(hass: HomeAssistant) -> dict[str, Any]:
                 "last_update_success": coordinator.last_update_success,
             }
         except Exception as err:
-            system_info[name] = {"error": str(err)}
+            system_info[entry_id] = {"error": str(err)}
 
     return {"dnsdist": system_info}

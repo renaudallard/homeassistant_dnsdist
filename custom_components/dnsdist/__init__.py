@@ -158,7 +158,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a dnsdist host or group entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    if "_services_registered" not in hass.data[DOMAIN]:
+    if not hass.data[DOMAIN].get("_services_registered"):
         await register_dnsdist_services(hass)
         hass.data[DOMAIN]["_services_registered"] = True
         _LOGGER.info("[dnsdist] Registered control services.")
