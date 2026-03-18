@@ -52,6 +52,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 - **UI-only setup** with zero YAML required
 - **Multiple hosts**, each dnsdist endpoint becomes its own device
 - **Aggregated groups** with smart rollups (sum counters, average CPU, max uptime, priority security status)
+- **Backend monitoring** with per-backend health (binary sensor), query counters, and enable/disable switches
 - **Filtering rule sensors** for per-rule match counts with idle/active icons
 - **Dynamic rule sensors** for temporary blocks (dynblocks) from rate limiting and DoS protection
 - **Custom Lovelace card** with gauges, counters, filtering rules, and dynamic rules
@@ -117,10 +118,15 @@ Each host or group creates a Home Assistant device with these sensors:
 | `req_per_hour`, `req_per_day` | count | `MEASUREMENT` |
 | `security_status` | string | - |
 
-Additional dynamic sensors:
+Additional dynamic entities (created per backend / per rule):
 
-- **Filtering rule sensors** (`Filter <rule name>`) with per-rule match counts and idle/active icons
-- **Dynamic rule sensors** (`Dynblock <network>`) with reason, action, time remaining, and eBPF status
+| Entity | Type | Description |
+|---|---|---|
+| `Backend <address>` | binary sensor | Backend health (up/down) |
+| `Backend <address> Queries` | sensor | Per-backend query counter (`TOTAL_INCREASING`) |
+| `Backend <address>` | switch | Enable/disable backend via REST API |
+| `Filter <rule name>` | sensor | Per-rule match count with idle/active icons |
+| `Dynblock <network>` | sensor | Block count with reason, action, time remaining |
 
 > Rate sensors are extrapolated from available history until enough data is collected (1h / 24h), then switch to actual measured values.
 
@@ -250,9 +256,10 @@ custom_components/dnsdist/
 ## Changelog
 
 ### 1.4.1
+- Add backend monitoring: per-backend health binary sensor, query counter sensor, and enable/disable switch
 - Add reconfigure flow to change host, port, API key, and SSL settings without removing the entry
-- Fix empty "Fetch error:" log on timeout — `TimeoutError.str()` is empty in Python; now logs a proper message
-- Add 10s timeout to service API calls (clear_cache, enable/disable_server, get_backends) to prevent hanging
+- Fix empty "Fetch error:" log on timeout, now logs a proper message
+- Add 10s timeout to service API calls to prevent hanging
 - Use consistent 10s timeout in config flow connection validation (was 5s)
 - Cap rolling history deque to 24 hours of samples to prevent unbounded memory growth
 - Add comprehensive unit tests for coordinator normalization, group aggregation, and service encoding

@@ -60,6 +60,7 @@ from .const import (
 from . import binary_sensor  # noqa: F401  # pylint: disable=unused-import
 from . import button  # noqa: F401  # pylint: disable=unused-import
 from . import sensor  # noqa: F401  # pylint: disable=unused-import
+from . import switch  # noqa: F401  # pylint: disable=unused-import
 from .coordinator import DnsdistCoordinator
 from .group_coordinator import DnsdistGroupCoordinator
 from .services import register_dnsdist_services
@@ -234,7 +235,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
-    platforms = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.BUTTON]
+    platforms = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
 
     # Clean up dispatcher listener for group coordinators on unload
@@ -247,7 +248,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a dnsdist entry."""
-    platforms = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.BUTTON]
+    platforms = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
     unloaded = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
