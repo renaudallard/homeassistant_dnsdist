@@ -45,6 +45,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
+    ATTR_BACKENDS,
     ATTR_CACHE_HITS,
     ATTR_CACHE_HITRATE,
     ATTR_CACHE_MISSES,
@@ -222,6 +223,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
         _async_sync_dynamic_rules()
         entry.async_on_unload(coordinator.async_add_listener(_async_sync_dynamic_rules))
+
+    # Backend query sensors (host entries only)
+    if not is_group:
+        backend_sensor_entities: dict[str, DnsdistBackendSensor] = {}
+
+        @callback
+        def _async_sync_backend_sensors() -> None:
+            if not coordinator.data:
+                return
+            backends = coordinator.data.get(ATTR_BACKENDS)
+            if not isinstance(backends, dict):
+                backends = {}
+
+            current_slugs = set(backends.keys())
+            known_slugs = set(backend_sensor_entities.keys())
+
+            removed_slugs = known_slugs - current_slugs
+            ent_reg = er.async_get(hass)
+            for slug in removed_slugs:
+                entity = backend_sensor_entities.pop(slug, None)
+                if entity:
+                    if entity.entity_id and ent_reg.async_get(entity.entity_id):
+                        ent_reg.async_remove(entity.entity_id)
+                    else:
+                        hass.async_create_task(entity.async_remove())
+
+            new_entities: list[DnsdistBackendSensor] = []
+            for slug in current_slugs:
+                if slug in backend_sensor_entities:
+                    continue
+                entity = DnsdistBackendSensor(
+                    coordinator=coordinator,
+                    entry_id=entry.entry_id,
+                    backend_slug=slug,
+                )
+                backend_sensor_entities[slug] = entity
+                new_entities.append(entity)
+
+            if new_entities:
+                async_add_entities(new_entities)
+
+        _async_sync_backend_sensors()
+        entry.async_on_unload(coordinator.async_add_listener(_async_sync_backend_sensors))
 
 
 class DnsdistSensor(CoordinatorEntity, SensorEntity):
@@ -477,3 +521,56 @@ class DnsdistDynamicRuleSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return build_device_info(self.coordinator, self._is_group)
+
+
+class DnsdistBackendSensor(CoordinatorEntity, SensorEntity):
+    """Sensor tracking query count for a dnsdist backend server."""
+
+    _attr_has_entity_name = False
+    _attr_should_poll = False
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:dns"
+
+    def __init__(self, *, coordinator, entry_id: str, backend_slug: str) -> None:
+        super().__init__(coordinator)
+        self._slug = backend_slug
+        self._attr_unique_id = f"{entry_id}:backend_queries:{backend_slug}"
+        self._attr_native_unit_of_measurement = COUNT
+
+    def _backend_data(self) -> dict[str, Any]:
+        data = self.coordinator.data or {}
+        backends = data.get(ATTR_BACKENDS, {}) if isinstance(data, dict) else {}
+        if isinstance(backends, dict):
+            return backends.get(self._slug, {})
+        return {}
+
+    @property
+    def name(self) -> str:
+        host = getattr(self.coordinator, "_name", "dnsdist")
+        backend = self._backend_data()
+        address = backend.get("address") or self._slug
+        name = backend.get("name")
+        if name:
+            return f"{host} Backend {name} Queries"
+        return f"{host} Backend {address} Queries"
+
+    @property
+    def native_value(self):
+        backend = self._backend_data()
+        queries = backend.get("queries")
+        if isinstance(queries, (int, float)):
+            return int(queries)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        backend = self._backend_data()
+        attrs: dict[str, Any] = {}
+        for key in ("address", "name", "responses", "drops", "latency", "qps", "outstanding"):
+            if key in backend and backend[key] is not None:
+                attrs[key] = backend[key]
+        return attrs
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return build_device_info(self.coordinator, False)
