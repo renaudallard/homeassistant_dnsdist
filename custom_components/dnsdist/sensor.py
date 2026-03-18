@@ -36,10 +36,12 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 import homeassistant.const as ha_const
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime, PERCENTAGE
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
@@ -72,7 +74,7 @@ COUNT = getattr(ha_const, "COUNT", "count")
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
     """Set up dnsdist sensors for a host or group."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     sensors: list[DnsdistSensor] = []

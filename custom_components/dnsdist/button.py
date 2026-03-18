@@ -31,9 +31,11 @@ import logging
 from typing import Any, AsyncIterator
 
 from homeassistant.components.button import ButtonEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_IS_GROUP, CONF_MEMBERS, DOMAIN
@@ -42,7 +44,7 @@ from .utils import build_device_info
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
     """Set up dnsdist action buttons for a host or group."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     is_group = bool(entry.data.get(CONF_IS_GROUP))
