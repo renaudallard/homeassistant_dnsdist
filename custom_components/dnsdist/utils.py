@@ -22,8 +22,6 @@ from .const import (
     ATTR_CPU,
     ATTR_DOWNSTREAM_ERRORS,
     ATTR_DROPS,
-    ATTR_DYNAMIC_RULES,
-    ATTR_FILTERING_RULES,
     ATTR_QUERIES,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
@@ -112,8 +110,6 @@ def make_zero_data() -> dict[str, Any]:
         ATTR_SECURITY_STATUS: "unknown",
         ATTR_REQ_PER_HOUR: 0,
         ATTR_REQ_PER_DAY: 0,
-        ATTR_FILTERING_RULES: {},
-        ATTR_DYNAMIC_RULES: {},
     }
 
 
