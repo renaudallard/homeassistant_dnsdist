@@ -13,7 +13,7 @@ A secure, high-performance bridge between **PowerDNS dnsdist 2.x** and **Home As
 Monitor every proxy, surface aggregated insights, and control dnsdist safely through REST-only actions.
 
 <p align="center">
-  <img src="images/lovelace-card.png" alt="dnsdist Lovelace card" width="480">
+  <img src="images/lovelace-card.png" alt="dnsdist Lovelace card" width="340">
 </p>
 
 | | |
