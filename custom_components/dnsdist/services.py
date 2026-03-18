@@ -1,3 +1,28 @@
+# Copyright (c) 2025, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
 """Service registration for PowerDNS dnsdist integration (REST-only)."""
 
 from __future__ import annotations
@@ -40,9 +65,7 @@ async def _call_dnsdist_api(
     try:
         verify_ssl = getattr(coordinator, "_verify_ssl", True)
         ssl_context = False if not verify_ssl else None
-        async with session.request(
-            method, url, headers=headers, ssl=ssl_context, json=json_data
-        ) as resp:
+        async with session.request(method, url, headers=headers, ssl=ssl_context, json=json_data) as resp:
             text = await resp.text()
             if resp.status in (200, 204):
                 _LOGGER.info("[%s] %s %s OK", getattr(coordinator, "_name", "?"), method, endpoint)
@@ -152,9 +175,7 @@ async def register_dnsdist_services(hass: HomeAssistant):
     hass.services.async_register(DOMAIN, "disable_server", handle_disable_server)
     hass.services.async_register(DOMAIN, "get_backends", handle_get_backends)
 
-    _LOGGER.info(
-        "Registered dnsdist services: clear_cache, enable_server, disable_server, get_backends."
-    )
+    _LOGGER.info("Registered dnsdist services: clear_cache, enable_server, disable_server, get_backends.")
 
 
 def _encode_backend_segment(raw_backend: str | None) -> str | None:

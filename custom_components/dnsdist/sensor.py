@@ -1,4 +1,30 @@
+# Copyright (c) 2025, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
 """Sensors for PowerDNS dnsdist integration."""
+
 from __future__ import annotations
 
 import logging
@@ -51,9 +77,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
     sensors: list[DnsdistSensor] = []
     is_group = bool(entry.data.get(CONF_IS_GROUP))
-    include_filter_sensors = bool(
-        entry.data.get(CONF_INCLUDE_FILTER_SENSORS, bool(is_group))
-    )
+    include_filter_sensors = bool(entry.data.get(CONF_INCLUDE_FILTER_SENSORS, bool(is_group)))
 
     # NOTE: Labels below are metric-only. HA will prefix with device (host/group) name
     # because _attr_has_entity_name = True on the entity class.
@@ -81,7 +105,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         # Rate sensors (rounded to whole units by coordinators)
         ATTR_REQ_PER_HOUR: ("Requests per Hour (last hour)", "req/h", "mdi:chart-line", SensorStateClass.MEASUREMENT),
         ATTR_REQ_PER_DAY: (
-            "Requests per Day (last 24h)", "req/d", "mdi:chart-areaspline", SensorStateClass.MEASUREMENT
+            "Requests per Day (last 24h)",
+            "req/d",
+            "mdi:chart-areaspline",
+            SensorStateClass.MEASUREMENT,
         ),
         ATTR_SECURITY_STATUS: ("Security Status", None, "mdi:shield-check-outline", None),
     }
