@@ -250,7 +250,7 @@ class HistoryMixin:
 
         if history:
             history.sort(key=lambda x: x[0])
-            self._history = deque(history)
+            self._history = deque(history, maxlen=self._history.maxlen)
         self._history_dirty = False
 
     async def _async_save_history(self) -> None:
