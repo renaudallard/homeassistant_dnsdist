@@ -43,6 +43,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 - [Troubleshooting](#troubleshooting)
 - [File Map](#file-map)
 - [Changelog](#changelog)
+- [Support](#support)
 - [License](#license)
 
 ---
@@ -369,6 +370,14 @@ custom_components/dnsdist/
 
 ### 1.1.0
 - HA 2025.10 compatibility; stable entity modeling; robust device identifiers
+
+---
+
+## Support
+
+If you find this integration useful, you can support its development:
+
+[![PayPal](https://img.shields.io/badge/PayPal-Donate-blue.svg)](https://www.paypal.me/RenaudAllard)
 
 ---
 
