@@ -70,11 +70,20 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 
 > Requires Home Assistant **2025.10** or newer.
 
+### HACS (recommended)
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=renaudallard&repository=homeassistant_dnsdist&category=integration)
+
+1. Click the button above (or add `https://github.com/renaudallard/homeassistant_dnsdist` as a custom repository in HACS, category *Integration*)
+2. Install **PowerDNS dnsdist** from HACS
+3. Restart Home Assistant
+4. Go to **Settings > Devices & Services > + Add Integration** and pick **PowerDNS dnsdist**
+
+### Manual
+
 1. Copy `custom_components/dnsdist/` into your Home Assistant `config/custom_components/` directory
 2. Restart Home Assistant
 3. Go to **Settings > Devices & Services > + Add Integration** and pick **PowerDNS dnsdist**
-
-**HACS:** Add this repository as a custom source or install directly if public.
 
 ---
 
