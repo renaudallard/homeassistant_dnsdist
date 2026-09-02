@@ -43,13 +43,26 @@ from custom_components.dnsdist.const import (
     ATTR_RULE_DROP,
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
+    CONF_NAME,
     DOMAIN,
 )
 
 
-def make_group_coordinator(members=None):
+def make_host_entry(name):
+    """Build a fake host config entry the group can count as configured."""
+    entry = MagicMock()
+    entry.data = {CONF_NAME: name}
+    entry.title = name
+    return entry
+
+
+def make_group_coordinator(members=None, configured=None):
     hass = MagicMock()
     hass.data = {}
+    names = members or ["host1", "host2"]
+    hass.config_entries.async_entries.return_value = [
+        make_host_entry(n) for n in (names if configured is None else configured)
+    ]
     with (
         patch("homeassistant.helpers.frame.report_usage"),
         patch(
@@ -296,3 +309,128 @@ class TestGroupAggregationDynamicRules:
         sources = result[ATTR_DYNAMIC_RULES][slug]["sources"]
         assert sources["h1"] == 3
         assert sources["h2"] == 7
+
+
+# ---------------------------------------------------------------------------
+# Expiry of aggregated rules
+# ---------------------------------------------------------------------------
+
+
+class TestGroupAggregationExpiry:
+    def test_expired_dynblocks_disappear_from_the_group(self):
+        """An empty aggregate from members that did report is the truth."""
+        coord, hass = make_group_coordinator(members=["h1"])
+        dyn = {"10-0-0-1-32": {"network": "10.0.0.1/32", "blocks": 3}}
+        c1 = make_member("h1", base_data(**{ATTR_DYNAMIC_RULES: dyn}))
+        run_aggregation(coord, hass, {"e1": c1})
+
+        c1.data = base_data(**{ATTR_DYNAMIC_RULES: {}})
+        result = run_aggregation(coord, hass, {"e1": c1})
+        assert result[ATTR_DYNAMIC_RULES] == {}
+
+    def test_deleted_filtering_rules_disappear_from_the_group(self):
+        coord, hass = make_group_coordinator(members=["h1"])
+        rules = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules}))
+        run_aggregation(coord, hass, {"e1": c1})
+
+        c1.data = base_data(**{ATTR_FILTERING_RULES: {}})
+        result = run_aggregation(coord, hass, {"e1": c1})
+        assert result[ATTR_FILTERING_RULES] == {}
+
+    def test_unreported_rules_keep_the_last_known_value(self):
+        """A member that could not be read must not wipe the sensors."""
+        coord, hass = make_group_coordinator(members=["h1"])
+        dyn = {"10-0-0-1-32": {"network": "10.0.0.1/32", "blocks": 3}}
+        c1 = make_member("h1", base_data(**{ATTR_DYNAMIC_RULES: dyn}))
+        run_aggregation(coord, hass, {"e1": c1})
+
+        c1.data = base_data()
+        result = run_aggregation(coord, hass, {"e1": c1})
+        assert list(result[ATTR_DYNAMIC_RULES]) == ["10-0-0-1-32"]
+
+    def test_a_member_that_is_down_does_not_delete_its_rules(self):
+        """A partial aggregate is no proof that the missing member's rules are gone."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        rules_h2 = {"block-porn": {"name": "Block Porn", "matches": 2}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules_h1}))
+        c2 = make_member("h2", base_data(**{ATTR_FILTERING_RULES: rules_h2}))
+        run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+
+        c2.last_update_success = False
+        result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+        assert sorted(result[ATTR_FILTERING_RULES]) == ["block-ads", "block-porn"]
+
+    def test_a_deleted_member_does_not_freeze_the_group(self):
+        """A member whose host entry is gone must not hold the aggregate back."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        rules_h2 = {"block-porn": {"name": "Block Porn", "matches": 2}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules_h1}))
+        c2 = make_member("h2", base_data(**{ATTR_FILTERING_RULES: rules_h2}))
+        run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+
+        hass.config_entries.async_entries.return_value = [make_host_entry("h1")]
+        result = run_aggregation(coord, hass, {"e1": c1})
+        assert list(result[ATTR_FILTERING_RULES]) == ["block-ads"]
+
+    def test_partial_first_read_leaves_the_key_out(self):
+        """With nothing known yet an incomplete aggregate must claim nothing."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules_h1}))
+        result = run_aggregation(coord, hass, {"e1": c1})
+        assert ATTR_FILTERING_RULES not in result
+
+    def test_an_active_member_reporting_no_rules_holds_the_aggregate(self):
+        """A host that is down still counts as active but reports no rules key."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        rules_h2 = {"block-porn": {"name": "Block Porn", "matches": 2}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules_h1}))
+        c2 = make_member("h2", base_data(**{ATTR_FILTERING_RULES: rules_h2}))
+        run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+
+        # h2 stays reachable but its own fetch failed, so it carries no rules
+        c2.data = base_data()
+        result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+        assert sorted(result[ATTR_FILTERING_RULES]) == ["block-ads", "block-porn"]
+
+    def test_all_members_reporting_empty_clears_the_rules(self):
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules_h1}))
+        c2 = make_member("h2", base_data(**{ATTR_FILTERING_RULES: {}}))
+        run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+
+        c1.data = base_data(**{ATTR_FILTERING_RULES: {}})
+        result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+        assert result[ATTR_FILTERING_RULES] == {}
+
+    def test_a_member_without_the_endpoint_does_not_block_for_ever(self):
+        """A 404 member will never report, so it must not freeze the aggregate."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules_h1}))
+        c2 = make_member("h2", base_data())
+        c2._server_config_supported = False
+        result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+        assert list(result[ATTR_FILTERING_RULES]) == ["block-ads"]
+
+        c1.data = base_data(**{ATTR_FILTERING_RULES: {}})
+        result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+        assert result[ATTR_FILTERING_RULES] == {}
+
+    def test_reloading_a_member_does_not_delete_its_rules(self):
+        """Reloading a host pops it from hass.data and signals the group at once."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        rules_h2 = {"block-porn": {"name": "Block Porn", "matches": 2}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules_h1}))
+        c2 = make_member("h2", base_data(**{ATTR_FILTERING_RULES: rules_h2}))
+        run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+
+        # h2 is mid-reload: gone from hass.data, entry still configured
+        result = run_aggregation(coord, hass, {"e1": c1})
+        assert sorted(result[ATTR_FILTERING_RULES]) == ["block-ads", "block-porn"]

@@ -54,6 +54,8 @@ from .const import (
     ATTR_RULE_DROP,
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
+    CONF_IS_GROUP,
+    CONF_NAME,
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
     STORAGE_KEY_HISTORY,
@@ -140,6 +142,10 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
             sec_values: list[str] = []
             aggregated_rules: dict[str, dict[str, Any]] = {}
             aggregated_dynamic: dict[str, dict[str, Any]] = {}
+            # How many members actually reported, so an empty aggregate can be
+            # told apart from members that could not be read.
+            rules_reporters = 0
+            dynamic_reporters = 0
 
             for c in active_members:
                 d = c.data or {}
@@ -162,6 +168,7 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
 
                 rules = d.get(ATTR_FILTERING_RULES)
                 if isinstance(rules, dict):
+                    rules_reporters += 1
                     source_name = getattr(c, "_name", "dnsdist")
                     for rule in rules.values():
                         if not isinstance(rule, dict):
@@ -194,6 +201,7 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                 # Aggregate dynamic rules (dynblocks)
                 dynamic_rules = d.get(ATTR_DYNAMIC_RULES)
                 if isinstance(dynamic_rules, dict):
+                    dynamic_reporters += 1
                     source_name = getattr(c, "_name", "dnsdist")
                     for rule in dynamic_rules.values():
                         if not isinstance(rule, dict):
@@ -242,15 +250,23 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                 ATTR_SECURITY_STATUS: sec_status,
             }
 
-            if aggregated_rules:
-                aggregated[ATTR_FILTERING_RULES] = aggregated_rules
-            elif ATTR_FILTERING_RULES in self._last_data:
-                aggregated[ATTR_FILTERING_RULES] = self._last_data.get(ATTR_FILTERING_RULES, {})
-
-            if aggregated_dynamic:
-                aggregated[ATTR_DYNAMIC_RULES] = aggregated_dynamic
-            elif ATTR_DYNAMIC_RULES in self._last_data:
-                aggregated[ATTR_DYNAMIC_RULES] = self._last_data.get(ATTR_DYNAMIC_RULES, {})
+            # The aggregate may only shrink once every member is present and
+            # has reported.  A member that is down publishes no rules at all,
+            # and taking that as an empty reading would delete the sensors its
+            # rules feed.
+            quorum = len(active_members) >= len(self._expected_members())
+            self._publish_aggregate(
+                aggregated,
+                ATTR_FILTERING_RULES,
+                aggregated_rules,
+                quorum and rules_reporters >= self._count_reporters(active_members, "_server_config_supported"),
+            )
+            self._publish_aggregate(
+                aggregated,
+                ATTR_DYNAMIC_RULES,
+                aggregated_dynamic,
+                quorum and dynamic_reporters >= self._count_reporters(active_members, "_dynamic_rules_supported"),
+            )
 
             # --- Rolling-window request totals for the group ---
             try:
@@ -272,6 +288,49 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
         except Exception as err:
             _LOGGER.warning("[%s] Aggregation error: %s", self._name, err)
             return self._last_data
+
+    def _expected_members(self) -> list[str]:
+        """Return the members that still have a host entry in Home Assistant.
+
+        A member that is configured but has not finished loading must hold the
+        aggregate back, while one whose entry was deleted must not hold it back
+        for ever.
+        """
+        configured = {
+            entry.data.get(CONF_NAME, entry.title)
+            for entry in self.hass.config_entries.async_entries(DOMAIN)
+            if not entry.data.get(CONF_IS_GROUP)
+        }
+        return [member for member in self._members if member in configured]
+
+    @staticmethod
+    def _count_reporters(active_members: list[Any], support_flag: str) -> int:
+        """Count the members that are expected to report on an endpoint.
+
+        A member whose dnsdist answered 404 will never report and must not hold
+        the aggregate back for ever, unlike one that is merely unread.
+        """
+        return sum(1 for member in active_members if getattr(member, support_flag, None) is not False)
+
+    def _publish_aggregate(
+        self,
+        aggregated: dict[str, Any],
+        key: str,
+        value: dict[str, Any],
+        complete: bool,
+    ) -> None:
+        """Store an aggregated mapping, letting it shrink only when complete.
+
+        With every member read the aggregate is the truth, empty included, so
+        expired dynblocks and deleted rules lose their sensors.  Short of that
+        the last known mapping is kept, and with no last known mapping the key
+        is left out entirely: a partial first read is no evidence at all.
+        """
+        previous = self._last_data.get(key)
+        if complete:
+            aggregated[key] = value
+        elif isinstance(previous, dict):
+            aggregated[key] = previous
 
     def _zero_data(self) -> dict[str, Any]:
         """Provide a valid zeroed dataset so sensors stay available."""
