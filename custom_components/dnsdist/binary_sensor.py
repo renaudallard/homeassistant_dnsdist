@@ -35,15 +35,14 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import ATTR_BACKENDS, CONF_IS_GROUP, DOMAIN
-from .utils import build_device_info
+from .utils import async_register_slug_platform, build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,46 +55,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     if is_group:
         return
 
-    backend_entities: dict[str, DnsdistBackendBinarySensor] = {}
-
-    @callback
-    def _async_sync_backends() -> None:
-        if not coordinator.data:
-            return
-        backends = coordinator.data.get(ATTR_BACKENDS)
-        if not isinstance(backends, dict):
-            backends = {}
-
-        current_slugs = set(backends.keys())
-        known_slugs = set(backend_entities.keys())
-
-        removed_slugs = known_slugs - current_slugs
-        ent_reg = er.async_get(hass)
-        for slug in removed_slugs:
-            entity = backend_entities.pop(slug, None)
-            if entity:
-                if entity.entity_id and ent_reg.async_get(entity.entity_id):
-                    ent_reg.async_remove(entity.entity_id)
-                else:
-                    hass.async_create_task(entity.async_remove())
-
-        new_entities: list[DnsdistBackendBinarySensor] = []
-        for slug in current_slugs:
-            if slug in backend_entities:
-                continue
-            entity = DnsdistBackendBinarySensor(
-                coordinator=coordinator,
-                entry_id=entry.entry_id,
-                backend_slug=slug,
-            )
-            backend_entities[slug] = entity
-            new_entities.append(entity)
-
-        if new_entities:
-            async_add_entities(new_entities)
-
-    _async_sync_backends()
-    entry.async_on_unload(coordinator.async_add_listener(_async_sync_backends))
+    async_register_slug_platform(
+        hass,
+        entry,
+        coordinator,
+        async_add_entities,
+        data_key=ATTR_BACKENDS,
+        factory=lambda slug: DnsdistBackendBinarySensor(
+            coordinator=coordinator,
+            entry_id=entry.entry_id,
+            backend_slug=slug,
+        ),
+    )
 
 
 class DnsdistBackendBinarySensor(CoordinatorEntity, BinarySensorEntity):

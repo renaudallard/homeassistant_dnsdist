@@ -140,6 +140,12 @@ Additional dynamic entities (created per backend / per rule):
 
 > Rate sensors are extrapolated from available history until enough data is collected (1h / 24h), then switch to actual measured values.
 
+Dynamic entities are removed as soon as their dnsdist object is gone: an expired dynblock, a deleted
+filtering rule, a backend taken out of the configuration. The registry is also reconciled when the entry
+is set up, so anything that disappeared while Home Assistant was stopped is cleaned up on the next start.
+A device left behind by renaming a host or group is removed once it holds no entities, and can be deleted
+from the device page in the meantime.
+
 Filtering rule entities are keyed on the rule name. dnsdist mints a new random UUID for every rule each
 time it loads its configuration, so a UUID based identity would create a fresh set of sensors on every
 dnsdist restart. Rules without a `name=` are keyed on their expression text instead. Give a rule an
@@ -242,6 +248,7 @@ Each host and group device also exposes a **Clear Cache** button. Group presses 
 | **Counters missing from Recorder** | Counters use `TOTAL_INCREASING` with `count` unit, ensuring long-term statistics work correctly. |
 | **Reconfigure connection** | Use the "Reconfigure" button on the integration card to change host, port, API key, or SSL settings. |
 | **REST prerequisites** | Ensure the dnsdist webserver is enabled, has an API key, and allows your HA network in the ACL. |
+| **Unavailable filter or dynblock entities** | They are removed automatically when the entry reloads. Reload the integration to clear them immediately. |
 | **A filtering rule sensor changed entity ID** | Its identity moved from the dnsdist UUID to the rule name. Set `name=` on the rule in `dnsdist.conf` to pin it. |
 
 **Diagnostics:** Visit **Settings > Devices & Services > PowerDNS dnsdist > ... > Download diagnostics**. Secrets are automatically redacted.

@@ -38,11 +38,10 @@ from homeassistant.components.sensor import (
 import homeassistant.const as ha_const
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime, PERCENTAGE
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers import entity_registry as er
 
 from .const import (
     ATTR_BACKENDS,
@@ -67,7 +66,7 @@ from .const import (
     SECURITY_STATUS_CODE,
     SECURITY_STATUS_LABEL,
 )
-from .utils import build_device_info
+from .utils import async_register_slug_platform, build_device_info
 
 # COUNT constant for sensor units - use HA's COUNT if available, otherwise fallback
 COUNT = getattr(ha_const, "COUNT", "count")
@@ -133,139 +132,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async_add_entities(sensors)
 
     if coordinator and include_filter_sensors:
-        known_rules: set[str] = set()
-
-        @callback
-        def _async_sync_filtering_rules() -> None:
-            if not coordinator.data:
-                return
-            rules = coordinator.data.get(ATTR_FILTERING_RULES)
-            if not isinstance(rules, dict):
-                return
-
-            new_entities: list[DnsdistFilteringRuleSensor] = []
-            for slug in rules:
-                if slug in known_rules:
-                    continue
-                entity = DnsdistFilteringRuleSensor(
-                    coordinator=coordinator,
-                    entry_id=entry.entry_id,
-                    rule_slug=slug,
-                    is_group=is_group,
-                )
-                known_rules.add(slug)
-                new_entities.append(entity)
-
-            if new_entities:
-                _LOGGER.debug(
-                    "[dnsdist] Adding filtering rule sensors for %s: %s",
-                    getattr(coordinator, "_name", "dnsdist"),
-                    [entity._slug for entity in new_entities],
-                )
-                async_add_entities(new_entities)
-
-        _async_sync_filtering_rules()
-        entry.async_on_unload(coordinator.async_add_listener(_async_sync_filtering_rules))
-
-        # Also sync dynamic rules (dynblocks)
-        # Track slug -> entity mapping so we can remove expired dynblocks
-        dynamic_entities: dict[str, DnsdistDynamicRuleSensor] = {}
-
-        @callback
-        def _async_sync_dynamic_rules() -> None:
-            if not coordinator.data:
-                return
-            rules = coordinator.data.get(ATTR_DYNAMIC_RULES)
-            if not isinstance(rules, dict):
-                rules = {}
-
-            current_slugs = set(rules.keys())
-            known_slugs = set(dynamic_entities.keys())
-
-            # Remove entities for expired dynblocks
-            expired_slugs = known_slugs - current_slugs
-            ent_reg = er.async_get(hass)
-            for slug in expired_slugs:
-                entity = dynamic_entities.pop(slug, None)
-                if entity:
-                    _LOGGER.debug(
-                        "[dnsdist] Removing expired dynamic rule sensor for %s: %s",
-                        getattr(coordinator, "_name", "dnsdist"),
-                        slug,
-                    )
-                    # Remove from entity registry to prevent restoration after restart
-                    if entity.entity_id and ent_reg.async_get(entity.entity_id):
-                        ent_reg.async_remove(entity.entity_id)
-                    else:
-                        hass.async_create_task(entity.async_remove())
-
-            # Add new entities
-            new_entities: list[DnsdistDynamicRuleSensor] = []
-            for slug in rules:
-                if slug in dynamic_entities:
-                    continue
-                entity = DnsdistDynamicRuleSensor(
-                    coordinator=coordinator,
-                    entry_id=entry.entry_id,
-                    rule_slug=slug,
-                    is_group=is_group,
-                )
-                dynamic_entities[slug] = entity
-                new_entities.append(entity)
-
-            if new_entities:
-                _LOGGER.debug(
-                    "[dnsdist] Adding dynamic rule sensors for %s: %s",
-                    getattr(coordinator, "_name", "dnsdist"),
-                    [entity._slug for entity in new_entities],
-                )
-                async_add_entities(new_entities)
-
-        _async_sync_dynamic_rules()
-        entry.async_on_unload(coordinator.async_add_listener(_async_sync_dynamic_rules))
+        async_register_slug_platform(
+            hass,
+            entry,
+            coordinator,
+            async_add_entities,
+            data_key=ATTR_FILTERING_RULES,
+            factory=lambda slug: DnsdistFilteringRuleSensor(
+                coordinator=coordinator,
+                entry_id=entry.entry_id,
+                rule_slug=slug,
+                is_group=is_group,
+            ),
+        )
+        async_register_slug_platform(
+            hass,
+            entry,
+            coordinator,
+            async_add_entities,
+            data_key=ATTR_DYNAMIC_RULES,
+            factory=lambda slug: DnsdistDynamicRuleSensor(
+                coordinator=coordinator,
+                entry_id=entry.entry_id,
+                rule_slug=slug,
+                is_group=is_group,
+            ),
+        )
 
     # Backend query sensors (host entries only)
     if not is_group:
-        backend_sensor_entities: dict[str, DnsdistBackendSensor] = {}
-
-        @callback
-        def _async_sync_backend_sensors() -> None:
-            if not coordinator.data:
-                return
-            backends = coordinator.data.get(ATTR_BACKENDS)
-            if not isinstance(backends, dict):
-                backends = {}
-
-            current_slugs = set(backends.keys())
-            known_slugs = set(backend_sensor_entities.keys())
-
-            removed_slugs = known_slugs - current_slugs
-            ent_reg = er.async_get(hass)
-            for slug in removed_slugs:
-                entity = backend_sensor_entities.pop(slug, None)
-                if entity:
-                    if entity.entity_id and ent_reg.async_get(entity.entity_id):
-                        ent_reg.async_remove(entity.entity_id)
-                    else:
-                        hass.async_create_task(entity.async_remove())
-
-            new_entities: list[DnsdistBackendSensor] = []
-            for slug in current_slugs:
-                if slug in backend_sensor_entities:
-                    continue
-                entity = DnsdistBackendSensor(
-                    coordinator=coordinator,
-                    entry_id=entry.entry_id,
-                    backend_slug=slug,
-                )
-                backend_sensor_entities[slug] = entity
-                new_entities.append(entity)
-
-            if new_entities:
-                async_add_entities(new_entities)
-
-        _async_sync_backend_sensors()
-        entry.async_on_unload(coordinator.async_add_listener(_async_sync_backend_sensors))
+        async_register_slug_platform(
+            hass,
+            entry,
+            coordinator,
+            async_add_entities,
+            data_key=ATTR_BACKENDS,
+            factory=lambda slug: DnsdistBackendSensor(
+                coordinator=coordinator,
+                entry_id=entry.entry_id,
+                backend_slug=slug,
+            ),
+        )
 
 
 class DnsdistSensor(CoordinatorEntity, SensorEntity):

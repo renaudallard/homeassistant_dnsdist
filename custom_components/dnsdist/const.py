@@ -71,6 +71,17 @@ ATTR_FILTERING_RULES = "filtering_rules"
 ATTR_DYNAMIC_RULES = "dynamic_rules"
 ATTR_BACKENDS = "backends"
 
+# Unique ID prefixes of the entities created on the fly, mapped to the
+# coordinator data key holding the slugs that are still live.  Used to spot
+# entities whose dnsdist object is gone so they can be removed.
+DYNAMIC_ENTITY_PREFIXES = {
+    "filtering_rule:": ATTR_FILTERING_RULES,
+    "dynamic_rule:": ATTR_DYNAMIC_RULES,
+    "backend:": ATTR_BACKENDS,
+    "backend_queries:": ATTR_BACKENDS,
+    "backend_switch:": ATTR_BACKENDS,
+}
+
 # Storage helpers
 STORAGE_VERSION = 1
 STORAGE_KEY_HISTORY = "history"

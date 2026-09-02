@@ -31,12 +31,18 @@ import logging
 import re
 import time
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from itertools import islice
 from time import monotonic
 from typing import Any, Deque, Tuple
 
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -47,6 +53,7 @@ from .const import (
     ATTR_CPU,
     ATTR_DOWNSTREAM_ERRORS,
     ATTR_DROPS,
+    ATTR_FILTERING_RULES,
     ATTR_QUERIES,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
@@ -55,6 +62,7 @@ from .const import (
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
     DOMAIN,
+    DYNAMIC_ENTITY_PREFIXES,
     STORAGE_KEY_HISTORY,
 )
 
@@ -91,6 +99,11 @@ def coerce_int(value: Any) -> int:
     return 0
 
 
+def device_identifier(name: str, is_group: bool) -> str:
+    """Build the device registry identifier for a host or group."""
+    return f"group:{name}" if is_group else f"host:{name}"
+
+
 def build_device_info(coordinator: DataUpdateCoordinator[Any], is_group: bool) -> DeviceInfo:
     """Build device information shared by entities.
 
@@ -102,7 +115,7 @@ def build_device_info(coordinator: DataUpdateCoordinator[Any], is_group: bool) -
         DeviceInfo dictionary for Home Assistant.
     """
     name = getattr(coordinator, "_name", "dnsdist")
-    identifier = f"group:{name}" if is_group else f"host:{name}"
+    identifier = device_identifier(name, is_group)
 
     info: DeviceInfo = DeviceInfo(
         identifiers={(DOMAIN, identifier)},
@@ -117,6 +130,180 @@ def build_device_info(coordinator: DataUpdateCoordinator[Any], is_group: bool) -
         info["configuration_url"] = f"{proto}://{coordinator._host}:{coordinator._port}"
 
     return info
+
+
+def split_dynamic_unique_id(unique_id: str, entry_id: str) -> tuple[str | None, str]:
+    """Split a unique ID into its dynamic entity prefix and slug.
+
+    Returns ``(None, "")`` for the fixed entities (metric sensors, buttons),
+    which are never orphaned and must not be touched.
+    """
+    head = f"{entry_id}:"
+    if not unique_id.startswith(head):
+        return None, ""
+
+    rest = unique_id[len(head) :]
+    for prefix in DYNAMIC_ENTITY_PREFIXES:
+        if rest.startswith(prefix):
+            return prefix, rest[len(prefix) :]
+
+    return None, ""
+
+
+def filtering_rule_aliases(data: dict[str, Any]) -> dict[str, str]:
+    """Map legacy filtering rule slugs onto the current ones.
+
+    Up to 1.4.2 the slug came from the dnsdist rule UUID, which is regenerated
+    every time dnsdist loads its configuration, so the slug now comes from the
+    rule name instead.  Mapping the old form to the new one lets a sensor keep
+    its entity ID and its history, as long as dnsdist has not reloaded since
+    the sensor was created.  Once it has, the old UUID is unknowable and the
+    entity is simply removed as the orphan it is.
+
+    The old code also fell back to the rule's position in the chain, but that
+    is not aliased here: the position points at whichever rule sits there now,
+    which is rarely the one the entity belonged to.
+    """
+    rules = data.get(ATTR_FILTERING_RULES)
+    if not isinstance(rules, dict):
+        return {}
+
+    aliases: dict[str, str] = {}
+    for slug, rule in rules.items():
+        if not isinstance(rule, dict):
+            continue
+        uuid = rule.get("uuid")
+        if not uuid:
+            continue
+        legacy = slugify_rule(uuid)
+        if legacy != slug:
+            aliases.setdefault(legacy, slug)
+
+    return aliases
+
+
+@callback
+def async_prune_orphaned_entities(hass: HomeAssistant, entry_id: str, data: Any) -> int:
+    """Delete registry entries whose dnsdist object no longer exists.
+
+    Each platform only tracks the entities it created during the current run,
+    so a rule, dynblock or backend that disappeared while the entry was
+    unloaded would linger forever.  A data key that is absent means the
+    endpoint could not be read, not that everything is gone, so that family is
+    left alone.
+
+    Returns the number of entities removed.
+    """
+    if not isinstance(data, dict):
+        return 0
+
+    ent_reg = er.async_get(hass)
+    aliases = filtering_rule_aliases(data)
+    removed = 0
+
+    for entry in er.async_entries_for_config_entry(ent_reg, entry_id):
+        prefix, slug = split_dynamic_unique_id(entry.unique_id, entry_id)
+        if prefix is None:
+            continue
+
+        live = data.get(DYNAMIC_ENTITY_PREFIXES[prefix])
+        if not isinstance(live, dict) or slug in live:
+            continue
+
+        if prefix == "filtering_rule:" and slug in aliases:
+            new_unique_id = f"{entry_id}:{prefix}{aliases[slug]}"
+            if not ent_reg.async_get_entity_id(entry.domain, entry.platform, new_unique_id):
+                _LOGGER.debug("[dnsdist] Migrating %s to unique ID %s", entry.entity_id, new_unique_id)
+                ent_reg.async_update_entity(entry.entity_id, new_unique_id=new_unique_id)
+                continue
+
+        _LOGGER.debug("[dnsdist] Removing orphaned entity %s (%s)", entry.entity_id, entry.unique_id)
+        ent_reg.async_remove(entry.entity_id)
+        removed += 1
+
+    return removed
+
+
+@callback
+def async_prune_orphaned_devices(hass: HomeAssistant, entry_id: str, identifier: str) -> int:
+    """Delete devices left behind by a rename.
+
+    The device is keyed on the display name, so renaming a host or group moves
+    every entity to a new device and leaves the old one behind empty.  Only
+    devices that no longer hold any entity are removed.
+
+    Returns the number of devices removed.
+    """
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+    removed = 0
+
+    for device in dr.async_entries_for_config_entry(dev_reg, entry_id):
+        if (DOMAIN, identifier) in device.identifiers:
+            continue
+        if device.config_entries != {entry_id}:
+            # Shared with another entry, which is not ours to delete.
+            continue
+        if er.async_entries_for_device(ent_reg, device.id, include_disabled_entities=True):
+            continue
+
+        _LOGGER.debug("[dnsdist] Removing orphaned device %s", device.name)
+        dev_reg.async_remove_device(device.id)
+        removed += 1
+
+    return removed
+
+
+@callback
+def async_register_slug_platform(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: DataUpdateCoordinator[Any],
+    async_add_entities: AddEntitiesCallback,
+    *,
+    data_key: str,
+    factory: Callable[[str], Entity],
+) -> None:
+    """Keep per-slug entities in step with coordinator data.
+
+    Adds an entity for every slug that shows up and removes the ones whose
+    slug disappeared, for as long as the entry stays loaded.
+    """
+    tracked: dict[str, Entity] = {}
+
+    @callback
+    def _async_sync() -> None:
+        items = coordinator.data.get(data_key) if isinstance(coordinator.data, dict) else None
+        if not isinstance(items, dict):
+            # No reading available: leave what we have rather than wiping it.
+            return
+
+        stale = set(tracked) - set(items)
+        if stale:
+            ent_reg = er.async_get(hass)
+            for slug in stale:
+                entity = tracked.pop(slug)
+                _LOGGER.debug("[dnsdist] Removing %s entity for %s", data_key, slug)
+                if entity.entity_id and ent_reg.async_get(entity.entity_id):
+                    # Drop the registry entry too, or it comes back after a restart.
+                    ent_reg.async_remove(entity.entity_id)
+                else:
+                    hass.async_create_task(entity.async_remove())
+
+        new_entities: list[Entity] = []
+        for slug in items:
+            if slug in tracked:
+                continue
+            entity = factory(slug)
+            tracked[slug] = entity
+            new_entities.append(entity)
+
+        if new_entities:
+            _LOGGER.debug("[dnsdist] Adding %s entities: %s", data_key, [e.unique_id for e in new_entities])
+            async_add_entities(new_entities)
+
+    _async_sync()
+    entry.async_on_unload(coordinator.async_add_listener(_async_sync))
 
 
 def make_zero_data() -> dict[str, Any]:

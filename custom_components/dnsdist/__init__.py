@@ -36,6 +36,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.components.http import StaticPathConfig
 
@@ -65,6 +66,11 @@ from . import switch  # noqa: F401  # pylint: disable=unused-import
 from .coordinator import DnsdistCoordinator
 from .group_coordinator import DnsdistGroupCoordinator
 from .services import register_dnsdist_services
+from .utils import (
+    async_prune_orphaned_devices,
+    async_prune_orphaned_entities,
+    device_identifier,
+)
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -236,7 +242,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
+    # Drop the entities of rules, dynblocks and backends that are gone.  This
+    # has to happen before the platforms start: they set up concurrently and
+    # each only knows about the entities it created during this run.
+    removed = async_prune_orphaned_entities(hass, entry.entry_id, coordinator.data)
+    if removed:
+        _LOGGER.info("[dnsdist] Removed %d orphaned entities from '%s'", removed, name)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # The entities have moved to the current device by now, so whatever is left
+    # empty was created under an earlier name.
+    async_prune_orphaned_devices(hass, entry.entry_id, device_identifier(name, is_group))
 
     # Clean up dispatcher listener for group coordinators on unload
     if is_group:
@@ -254,6 +271,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)
         _LOGGER.info("Unloaded dnsdist entry '%s'", entry.title)
     return unloaded
+
+
+async def async_remove_config_entry_device(hass: HomeAssistant, entry: ConfigEntry, device: DeviceEntry) -> bool:
+    """Allow deleting a device that is no longer the entry's host or group.
+
+    Devices are keyed on the display name, so renaming one leaves the old
+    device behind.  Without this the UI offers no way to delete it.
+    """
+    is_group = bool(entry.data.get(CONF_IS_GROUP, False) or entry.data.get(CONF_MEMBERS))
+    name = entry.data.get(CONF_NAME) or entry.title
+    return (DOMAIN, device_identifier(name, is_group)) not in device.identifiers
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
