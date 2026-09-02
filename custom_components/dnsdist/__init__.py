@@ -38,6 +38,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.storage import Store
 from homeassistant.components.http import StaticPathConfig
 
 from .const import (
@@ -54,6 +55,8 @@ from .const import (
     CONF_MEMBERS,
     CONF_IS_GROUP,
     DEFAULT_UPDATE_INTERVAL,
+    STORAGE_KEY_HISTORY,
+    STORAGE_VERSION,
 )
 
 # Pre-import the platforms so Home Assistant does not try to import them from within
@@ -271,6 +274,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)
         _LOGGER.info("Unloaded dnsdist entry '%s'", entry.title)
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the request history kept for a removed entry."""
+    store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_{STORAGE_KEY_HISTORY}")
+    await store.async_remove()
 
 
 async def async_remove_config_entry_device(hass: HomeAssistant, entry: ConfigEntry, device: DeviceEntry) -> bool:
