@@ -84,13 +84,9 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
                 )
             )
 
-            if include_filter_sensors and not new_include_filters and remove_on_disable:
-                _remove_filtering_rule_entities(self.hass, self.config_entry.entry_id)
-
-            # Update name (we'll update entry title)
+            # Update name (the entry title follows it below)
             new_name = user_input.get(CONF_NAME, name)
             if isinstance(new_name, str) and new_name:
-                self.hass.config_entries.async_update_entry(self.config_entry, title=new_name)
                 new_data[CONF_NAME] = new_name
 
             # Update group-specific members
@@ -102,7 +98,16 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
                     new_data[CONF_MEMBERS] = list(new_members)
 
             if not errors:
-                self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+                # Only once the form is accepted, or a rejected submission
+                # would delete the sensors anyway.
+                if include_filter_sensors and not new_include_filters and remove_on_disable:
+                    _remove_rule_entities(self.hass, self.config_entry.entry_id)
+
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data=new_data,
+                    title=new_data.get(CONF_NAME, self.config_entry.title),
+                )
                 return self.async_create_entry(title="", data={})
 
         # Schemas
@@ -143,20 +148,25 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
 
-def _remove_filtering_rule_entities(hass, entry_id: str) -> None:
-    """Delete filtering rule sensor entities for an entry."""
+def _remove_rule_entities(hass, entry_id: str) -> None:
+    """Delete the rule sensor entities for an entry.
+
+    The option gates both the filtering rule and the dynblock sensors, so both
+    have to go, otherwise the dynblock ones stay behind with nothing left to
+    ever remove them.
+    """
 
     entity_registry = er.async_get(hass)
-    filter_unique_prefix = f"{entry_id}:filtering_rule:"
+    prefixes = (f"{entry_id}:filtering_rule:", f"{entry_id}:dynamic_rule:")
     to_remove = [
         er_entry.entity_id
-        for er_entry in list(entity_registry.entities.values())
-        if er_entry.config_entry_id == entry_id and er_entry.unique_id.startswith(filter_unique_prefix)
+        for er_entry in er.async_entries_for_config_entry(entity_registry, entry_id)
+        if er_entry.unique_id.startswith(prefixes)
     ]
 
     if to_remove:
         _LOGGER.debug(
-            "[dnsdist] Removing filtering rule sensors on disable: %s",
+            "[dnsdist] Removing rule sensors on disable: %s",
             to_remove,
         )
 

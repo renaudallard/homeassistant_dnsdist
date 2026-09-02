@@ -20,7 +20,7 @@
           "use_https": "Use HTTPS",
           "verify_ssl": "Verify SSL certificate",
           "update_interval": "Update interval (seconds)",
-          "include_filter_sensors": "Create filtering rule sensors"
+          "include_filter_sensors": "Create filtering and dynamic rule sensors"
         }
       },
       "add_group": {
@@ -30,7 +30,7 @@
           "name": "Group name",
           "members": "Group members",
           "update_interval": "Update interval (seconds)",
-          "include_filter_sensors": "Create filtering rule sensors"
+          "include_filter_sensors": "Create filtering and dynamic rule sensors"
         }
       },
       "reconfigure": {
@@ -70,8 +70,8 @@
           "name": "Name",
           "members": "Members (for groups only)",
           "update_interval": "Update interval (seconds)",
-          "include_filter_sensors": "Create filtering rule sensors",
-          "remove_filter_sensors_on_disable": "Delete filtering rule sensors when disabling"
+          "include_filter_sensors": "Create filtering and dynamic rule sensors",
+          "remove_filter_sensors_on_disable": "Delete filtering and dynamic rule sensors when disabling"
         }
       }
     }

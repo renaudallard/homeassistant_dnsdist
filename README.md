@@ -98,7 +98,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 | **API Key** | Optional |
 | **Use HTTPS / Verify SSL** | Toggle TLS and certificate validation |
 | **Update interval** | Polling frequency in seconds (default `30`) |
-| **Include filtering rule sensors** | Disabled by default |
+| **Create filtering and dynamic rule sensors** | Disabled by default |
 
 Host validation enforces RFC 1123 hostnames plus IPv4/IPv6 literals.
 Setup requires a valid dnsdist statistics JSON payload before finishing, so wrong URLs or non-dnsdist endpoints fail fast.
@@ -110,7 +110,7 @@ Setup requires a valid dnsdist statistics JSON payload before finishing, so wron
 | **Group name** | Home Assistant device label |
 | **Members** | Choose from existing host names |
 | **Update interval** | Default `30` seconds |
-| **Include filtering rule sensors** | Enabled by default |
+| **Create filtering and dynamic rule sensors** | Enabled by default |
 
 Group rollups: **sum** (counters), **avg** (CPU %), **max** (uptime), and priority **security status** (critical > warning > ok > unknown).
 
@@ -191,8 +191,8 @@ From the integration options panel:
 - Rename a host or group
 - Tune the update interval
 - Add or remove group members
-- Toggle filtering rule sensors (hosts default off, groups default on)
-- Optionally delete existing filter sensors when disabling
+- Toggle filtering and dynamic rule sensors (hosts default off, groups default on)
+- Optionally delete the existing filtering and dynblock sensors when disabling
 
 To change connection parameters (host, port, API key, SSL), use the **Reconfigure** button on the integration card.
 
