@@ -326,7 +326,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
 
     def _parse_filtering_rules(self, payload: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
         """Parse filtering rules from the server config response."""
-        rules_raw: list[dict[str, Any]] = []
+        rules_raw: list[dict[str, Any]] | None = None
 
         # ``rules`` is the documented list of live filtering rules. Allow a few
         # variations to support older or vendor-modified responses.
@@ -348,6 +348,12 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                 if rules_raw:
                     break
 
+        # No list anywhere means the response could not be read, which is not
+        # the same as dnsdist having no rules.  Say so, or the caller would
+        # take an empty mapping as proof that every rule is gone.
+        if rules_raw is None:
+            return None
+
         rules: dict[str, dict[str, Any]] = {}
         for item in rules_raw:
             if not isinstance(item, dict):
@@ -356,7 +362,17 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             if normalized is None:
                 continue
             slug = normalized.pop("slug")
-            rules[slug] = normalized
+            existing = rules.get(slug)
+            if existing is None:
+                rules[slug] = normalized
+                continue
+            # Rules sharing a name (or expression) cannot be told apart by any
+            # identifier dnsdist keeps across a reload, so count them together
+            # rather than dropping all but the last.  The per-rule identifiers
+            # no longer describe a single rule once merged.
+            existing["matches"] += normalized["matches"]
+            existing["uuid"] = None
+            existing["id"] = None
 
         return rules
 
@@ -418,8 +434,11 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                 matches = coerce_int(item.get(key))
                 break
 
-        slug_source = item.get("uuid") or item.get("id") or name
-        slug = slugify_rule(slug_source)
+        # dnsdist mints a fresh random uuid for every rule each time it loads
+        # its configuration, and "id" is only the rule's position in the chain,
+        # so neither survives a restart.  The name, which falls back to the
+        # rule expression, is the only identifier that stays put.
+        slug = slugify_rule(name)
 
         rule = {
             "slug": slug,

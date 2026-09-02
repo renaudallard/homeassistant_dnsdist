@@ -261,17 +261,73 @@ class TestNormalizeFilteringRule:
         result = self.coord._normalize_filtering_rule(item)
         assert result["matches"] == 33
 
-    def test_slug_from_uuid(self):
+    def test_slug_ignores_uuid_and_id(self):
+        # dnsdist regenerates the uuid on every config load and id is only the
+        # rule position, so the slug has to come from the name
         item = {"name": "Some Rule", "uuid": "my-uuid", "id": 5}
         result = self.coord._normalize_filtering_rule(item)
-        # slug is derived from uuid when present
-        assert "slug" in result
-        assert result["slug"] != ""
+        assert result["slug"] == "some-rule"
+
+    def test_slug_survives_a_new_uuid(self):
+        first = self.coord._normalize_filtering_rule({"name": "Block Ads", "uuid": "aaa", "id": 0})
+        second = self.coord._normalize_filtering_rule({"name": "Block Ads", "uuid": "bbb", "id": 4})
+        assert first["slug"] == second["slug"]
 
     def test_slug_from_name_when_no_uuid_or_id(self):
         item = {"name": "Block Home"}
         result = self.coord._normalize_filtering_rule(item)
         assert result["slug"] == "block-home"
+
+    def test_slug_from_rule_expression_for_unnamed_rules(self):
+        item = {"name": "", "rule": "qtype==AAAA", "uuid": "aaa"}
+        result = self.coord._normalize_filtering_rule(item)
+        assert result["slug"] == "qtype-aaaa"
+
+
+# ---------------------------------------------------------------------------
+# _parse_filtering_rules
+# ---------------------------------------------------------------------------
+
+
+class TestParseFilteringRules:
+    def setup_method(self):
+        self.coord = make_coordinator()
+
+    def test_rules_keyed_by_name_slug(self):
+        payload = {"rules": [{"name": "Block Ads", "matches": 3, "uuid": "aaa"}]}
+        assert set(self.coord._parse_filtering_rules(payload)) == {"block-ads"}
+
+    def test_duplicate_names_are_counted_together(self):
+        payload = {
+            "rules": [
+                {"name": "Block Ads", "matches": 3, "uuid": "aaa"},
+                {"name": "Block Ads", "matches": 4, "uuid": "bbb"},
+            ]
+        }
+        rules = self.coord._parse_filtering_rules(payload)
+        assert list(rules) == ["block-ads"]
+        assert rules["block-ads"]["matches"] == 7
+
+    def test_no_rules_gives_empty_mapping(self):
+        """dnsdist with zero rules is not the same as an unreadable payload."""
+        assert self.coord._parse_filtering_rules({"rules": []}) == {}
+
+    def test_unreadable_payload_gives_none(self):
+        # None keeps the caller from taking an empty mapping as proof that
+        # every rule is gone, which would delete all the rule sensors
+        assert self.coord._parse_filtering_rules({}) is None
+        assert self.coord._parse_filtering_rules({"rules": "nonsense"}) is None
+
+    def test_merged_rules_drop_the_single_rule_identifiers(self):
+        payload = {
+            "rules": [
+                {"name": "Block Ads", "matches": 3, "uuid": "aaa", "id": 0},
+                {"name": "Block Ads", "matches": 4, "uuid": "bbb", "id": 1},
+            ]
+        }
+        merged = self.coord._parse_filtering_rules(payload)["block-ads"]
+        assert merged["uuid"] is None
+        assert merged["id"] is None
 
 
 # ---------------------------------------------------------------------------
