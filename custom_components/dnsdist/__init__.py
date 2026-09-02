@@ -34,13 +34,14 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, CoreState
-from homeassistant.const import Platform, EVENT_HOMEASSISTANT_STARTED
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.components.http import StaticPathConfig
 
 from .const import (
     DOMAIN,
+    PLATFORMS,
     SIGNAL_DNSDIST_RELOAD,
     CONF_NAME,
     CONF_HOST,
@@ -235,8 +236,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
-    platforms = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
-    await hass.config_entries.async_forward_entry_setups(entry, platforms)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Clean up dispatcher listener for group coordinators on unload
     if is_group:
@@ -248,8 +248,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a dnsdist entry."""
-    platforms = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
-    unloaded = await hass.config_entries.async_unload_platforms(entry, platforms)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)

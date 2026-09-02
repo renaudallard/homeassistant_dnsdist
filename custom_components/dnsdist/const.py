@@ -25,13 +25,15 @@
 
 """Constants for the PowerDNS dnsdist integration."""
 
+from homeassistant.const import Platform
+
 DOMAIN = "dnsdist"
 
 # Default update interval in seconds
 DEFAULT_UPDATE_INTERVAL = 30
 
 # Platforms used by this integration
-PLATFORMS = ["sensor", "button"]  # <-- added button
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 # Dispatcher signal names (safe to import everywhere)
 SIGNAL_DNSDIST_RELOAD = f"{DOMAIN}_reload_groups"

@@ -250,7 +250,8 @@ custom_components/dnsdist/
   manifest.json        options_flow.py      group_coordinator.py
   const.py             sensor.py            button.py
   utils.py             services.py          diagnostics.py
-  strings.json         services.yaml
+  strings.json         services.yaml        binary_sensor.py
+                                            switch.py
   translations/
     en.json
   brand/               icon.png, logo.png (HA 2026.3+)
