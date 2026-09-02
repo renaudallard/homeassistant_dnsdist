@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import time
@@ -73,11 +74,17 @@ SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 
 
 def slugify_rule(value: Any) -> str:
-    """Slugify a filtering rule name with hash fallback."""
+    """Slugify a filtering rule name with digest fallback.
+
+    The fallback has to be a digest rather than hash(): Python salts string
+    hashing per process, so a hash based slug would give the entity a new
+    unique ID on every Home Assistant restart.
+    """
     base = str(value or "").lower()
     base = SLUG_PATTERN.sub("-", base).strip("-")
     if not base:
-        base = f"rule-{abs(hash(value)) & 0xFFFF:x}"
+        digest = hashlib.blake2s(str(value).encode("utf-8"), digest_size=4).hexdigest()
+        base = f"rule-{digest}"
     return base
 
 

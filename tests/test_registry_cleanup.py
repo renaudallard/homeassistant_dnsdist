@@ -25,6 +25,8 @@
 
 """Tests for orphaned entity and device cleanup."""
 
+import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 
 from custom_components.dnsdist.const import (
@@ -39,6 +41,7 @@ from custom_components.dnsdist.utils import (
     async_register_slug_platform,
     device_identifier,
     filtering_rule_aliases,
+    slugify_rule,
     split_dynamic_unique_id,
 )
 
@@ -94,6 +97,35 @@ def prune_entities(entries, data):
         er_mock.async_entries_for_config_entry.side_effect = lambda reg, entry_id: list(reg.entries)
         async_prune_orphaned_entities(MagicMock(), ENTRY_ID, data)
     return registry
+
+
+# ---------------------------------------------------------------------------
+# slugify_rule determinism
+# ---------------------------------------------------------------------------
+
+
+class TestSlugifyDeterminism:
+    def test_fallback_is_stable_across_processes(self):
+        """A hash based slug would change with every PYTHONHASHSEED."""
+        code = "from custom_components.dnsdist.utils import slugify_rule; print(slugify_rule('!!!'))"
+        slugs = set()
+        for seed in ("0", "1", "2"):
+            out = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                text=True,
+                check=True,
+                env={"PYTHONHASHSEED": seed, "PATH": "/usr/bin:/bin"},
+            )
+            slugs.add(out.stdout.strip())
+        assert len(slugs) == 1
+        assert slugs.pop() == slugify_rule("!!!")
+
+    def test_fallback_distinguishes_different_values(self):
+        assert slugify_rule("!!!") != slugify_rule("???")
+
+    def test_falsy_values_do_not_collide(self):
+        assert slugify_rule(0) != slugify_rule("")
 
 
 # ---------------------------------------------------------------------------
