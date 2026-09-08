@@ -11,9 +11,21 @@ permissions:
   contents: write
 
 jobs:
+  # A red check must not reach HACS users, so hold the release on the same
+  # workflows that guard a pull request.
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  ruff:
+    uses: ./.github/workflows/ruff.yml
+
+  mypy:
+    uses: ./.github/workflows/mypy.yml
+
   release:
     name: Auto Release on Version Change
     runs-on: ubuntu-latest
+    needs: [tests, ruff, mypy]
 
     steps:
       - name: Checkout repository

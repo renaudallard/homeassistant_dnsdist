@@ -6,6 +6,9 @@ on:
     branches:
       - main
   workflow_dispatch:
+  # Callable, so the release gates on this check itself rather than on
+  # a copy of its steps that drifts out of step with it.
+  workflow_call:
 
 permissions:
   contents: read
