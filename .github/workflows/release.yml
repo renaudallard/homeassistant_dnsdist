@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Extract version from manifest.json
         id: manifest
@@ -57,7 +57,7 @@ jobs:
 
       - name: Create release
         if: steps.tag_check.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.manifest.outputs.version }}
           name: Release v${{ steps.manifest.outputs.version }}
