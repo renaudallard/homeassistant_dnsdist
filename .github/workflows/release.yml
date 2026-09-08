@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - "custom_components/dnsdist/manifest.json"
-      - "README.md"
 
 permissions:
   contents: write
@@ -20,30 +19,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
       - name: Extract version from manifest.json
         id: manifest
         run: |
-          import json
-          with open("custom_components/dnsdist/manifest.json") as f:
-              manifest = json.load(f)
-          version = manifest.get("version", "0.0.0")
-          print(f"::set-output name=version::{version}")
-        shell: python
+          version=$(jq -r .version custom_components/dnsdist/manifest.json)
+          if [ -z "$version" ] || [ "$version" = "null" ]; then
+            echo "no version in manifest.json" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Check if tag already exists
         id: tag_check
         run: |
-          VERSION=${{ steps.manifest.outputs.version }}
-          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Tag v$VERSION already exists. Skipping release."
-            echo "exists=true" >> $GITHUB_OUTPUT
+          tag="v${{ steps.manifest.outputs.version }}"
+          # The checkout is shallow and fetches no tags, so ask the remote.
+          # Asking the working copy never found one and every push reached
+          # the release step, which then rewrote the release it found.
+          if git ls-remote --tags --exit-code origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists. Skipping release."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create release
