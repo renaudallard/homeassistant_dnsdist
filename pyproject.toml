@@ -1,5 +1,5 @@
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 ignore_missing_imports = true
 check_untyped_defs = false
 disallow_untyped_defs = false
@@ -12,7 +12,7 @@ show_error_codes = true
 disable_error_code = ["attr-defined", "assignment", "arg-type", "call-overload", "misc"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 120
 
 [tool.ruff.lint]

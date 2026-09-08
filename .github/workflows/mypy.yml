@@ -24,11 +24,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          # The pinned Home Assistant refuses to install on anything older.
+          python-version: "3.14"
 
       - name: Install dependencies
         run: |
-          pip install mypy homeassistant voluptuous aiohttp
+          pip install -r requirements-dev.txt
 
       - name: Run mypy
         run: mypy custom_components/dnsdist/ --ignore-missing-imports

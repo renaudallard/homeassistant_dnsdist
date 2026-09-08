@@ -24,10 +24,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          # The pinned Home Assistant refuses to install on anything older.
+          python-version: "3.14"
 
       - name: Install dependencies
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-dev.txt
 
       - name: Run tests
         run: python -m pytest tests/ -v
