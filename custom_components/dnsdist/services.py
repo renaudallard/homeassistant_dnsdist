@@ -29,12 +29,14 @@ from __future__ import annotations
 
 import logging
 from asyncio import timeout
+from typing import Any
 from urllib.parse import urlencode
 
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, SERVICE_CLEAR_CACHE
+from .utils import slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -99,15 +101,27 @@ async def _call_dnsdist_api(
         return -1, str(err)
 
 
+def _host_targets(hass: HomeAssistant, target: str | None) -> list[Any]:
+    """Pick the host coordinators a service call is aimed at.
+
+    A group has no API of its own, so it is never a target: its Clear Cache
+    button fans out over the member names instead. The name is matched exactly
+    first and then by slug, so the entity ID spelling the card and the entity
+    registry use finds the host as well as the display name does.
+    """
+    hosts = [coord for coord in hass.data.get(DOMAIN, {}).values() if hasattr(coord, "_host")]
+    if not target:
+        return hosts
+
+    if exact := [coord for coord in hosts if coord._name == target]:
+        return exact
+
+    wanted = slugify_rule(target)
+    return [coord for coord in hosts if slugify_rule(coord._name) == wanted]
+
+
 async def register_dnsdist_services(hass: HomeAssistant):
     """Register REST-only dnsdist services."""
-
-    async def _targets(target: str | None):
-        coords = list(hass.data.get(DOMAIN, {}).values())
-        if not target:
-            # Only real hosts (exclude group coordinators that don't have _host)
-            return [c for c in coords if hasattr(c, "_host")]
-        return [c for c in coords if getattr(c, "_name", None) == target]
 
     # ------------------------------------------------------------
     # clear_cache (REST): DELETE /api/v1/cache?pool=<pool>&name=.&suffix=1
@@ -115,7 +129,7 @@ async def register_dnsdist_services(hass: HomeAssistant):
     async def handle_clear_cache(call: ServiceCall):
         pool = call.data.get("pool", "")
         target = call.data.get("host")
-        for coord in await _targets(target):
+        for coord in _host_targets(hass, target):
             status, _ = await _call_dnsdist_api(
                 coord,
                 "DELETE",

@@ -222,7 +222,7 @@ To change connection parameters (host, port, API key, SSL), use the **Reconfigur
 
 `clear_cache` is the only service, because expunging the packet cache is the
 only state change dnsdist accepts over its HTTP API.
-Supplying `host` targets a specific display name; omit it to broadcast to every host (groups excluded).
+Supplying `host` targets one host by display name, or by the entity ID spelling of it; omit it to broadcast to every host (groups excluded).
 
 ### `dnsdist.clear_cache`
 
