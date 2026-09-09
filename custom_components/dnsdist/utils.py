@@ -317,9 +317,16 @@ def async_register_slug_platform(
         if stale:
             ent_reg = er.async_get(hass)
             for slug in stale:
-                entity = tracked.pop(slug)
+                entity = tracked[slug]
+                if not entity.entity_id:
+                    # Still on its way to the platform, so it has nothing to
+                    # remove yet and no hass to remove it with. Keep it tracked
+                    # and take it out on a later update.
+                    continue
+
+                del tracked[slug]
                 _LOGGER.debug("[dnsdist] Removing %s entity for %s", data_key, slug)
-                if entity.entity_id and ent_reg.async_get(entity.entity_id):
+                if ent_reg.async_get(entity.entity_id):
                     # Drop the registry entry too, or it comes back after a restart.
                     ent_reg.async_remove(entity.entity_id)
                 else:

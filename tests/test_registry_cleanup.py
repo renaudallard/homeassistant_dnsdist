@@ -387,6 +387,20 @@ class TestRegisterSlugPlatform:
 
         assert registry.removed == ["sensor.b"]
 
+    def test_entity_still_being_added_is_kept_for_later(self):
+        """An entity with no entity_id yet has no hass to remove itself with."""
+        coordinator, registry, added, sync = self._setup({"a": {}})
+        added[0].entity_id = None
+
+        coordinator.data = {ATTR_BACKENDS: {}}
+        self._resync(sync, registry)
+        assert registry.removed == []
+
+        added[0].entity_id = "sensor.a"
+        registry.entries = [FakeRegistryEntry("sensor.a", "a")]
+        self._resync(sync, registry)
+        assert registry.removed == ["sensor.a"]
+
     def test_does_not_add_duplicates_on_resync(self):
         coordinator, registry, added, sync = self._setup({"a": {}})
         self._resync(sync, registry)
