@@ -71,6 +71,7 @@ from .const import (
     RETIRED_ENTITY_PREFIXES,
     STORAGE_KEY_HISTORY,
     STORAGE_KEY_LAST_RAW,
+    STORAGE_KEY_SOURCE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -462,6 +463,7 @@ class HistoryMixin:
     Subclasses must define:
         _history: Deque[Tuple[float, int]]
         _last_raw: int | None
+        _history_source: str
         _history_loaded: bool
         _history_dirty: bool
         _last_history_persist: float | None
@@ -471,6 +473,7 @@ class HistoryMixin:
 
     _history: Deque[Tuple[float, int]]
     _last_raw: int | None
+    _history_source: str
     _history_loaded: bool
     _history_dirty: bool
     _last_history_persist: float | None
@@ -491,6 +494,15 @@ class HistoryMixin:
             return
 
         if not isinstance(stored, dict):
+            return
+
+        source = stored.get(STORAGE_KEY_SOURCE)
+        if source is not None and source != self._history_source:
+            # The entry was pointed at a different dnsdist, whose counter has
+            # nothing to do with the one this history was built from. A file
+            # written before this field existed has no claim either way, so it
+            # is taken as ours.
+            _LOGGER.debug("[%s] Dropping history collected from %s", self._name, source)
             return
 
         last_raw = stored.get(STORAGE_KEY_LAST_RAW)
@@ -527,6 +539,7 @@ class HistoryMixin:
         return {
             STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history],
             STORAGE_KEY_LAST_RAW: self._last_raw,
+            STORAGE_KEY_SOURCE: self._history_source,
         }
 
     @callback

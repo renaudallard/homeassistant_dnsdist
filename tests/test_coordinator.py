@@ -48,6 +48,7 @@ from custom_components.dnsdist.const import (
     ATTR_UPTIME,
     STORAGE_KEY_HISTORY,
     STORAGE_KEY_LAST_RAW,
+    STORAGE_KEY_SOURCE,
 )
 
 
@@ -341,6 +342,43 @@ class TestHistoryPersistence:
         assert loaded._history[-1][1] - loaded._history[-2][1] == 0, "one interval given up, once"
         loaded._update_history(now + 30, 500_300)
         assert loaded._history[-1][1] - loaded._history[-2][1] == 100
+
+    def test_the_payload_names_the_host_it_came_from(self):
+        coord = make_coordinator()
+        coord._update_history(1000.0, 50)
+        assert coord._history_payload()[STORAGE_KEY_SOURCE] == "192.168.1.1:8083"
+
+    def test_history_from_another_host_is_dropped(self):
+        """Reconfiguring the entry keeps the store, but not the counter it held."""
+        now = time.time()
+        source = make_coordinator()
+        source._update_history(now - 60, 8_000_000)
+        source._update_history(now - 30, 8_000_100)
+        stored = source._history_payload()
+        stored[STORAGE_KEY_SOURCE] = "10.9.9.9:8083"
+        loaded = self.load(make_coordinator(), stored)
+        assert list(loaded._history) == []
+        assert loaded._last_raw is None
+
+    def test_a_new_host_does_not_spike_the_rates(self):
+        now = time.time()
+        source = make_coordinator()
+        for i in range(120):
+            source._update_history(now - 3600 + i * 30, 8_000_000 + i * 100)
+        stored = source._history_payload()
+        stored[STORAGE_KEY_SOURCE] = "10.9.9.9:8083"
+        loaded = self.load(make_coordinator(), stored)
+        loaded._update_history(now, 5_000_000)
+        assert loaded._compute_rates(now) == (0, 0), "starts over rather than counting 5M in one poll"
+
+    def test_history_from_the_same_host_is_kept(self):
+        now = time.time()
+        source = make_coordinator()
+        source._update_history(now - 60, 1000)
+        source._update_history(now - 30, 1100)
+        loaded = self.load(make_coordinator(), source._history_payload())
+        assert len(loaded._history) == 2
+        assert loaded._last_raw == 1100
 
     def test_samples_older_than_a_day_are_dropped_on_load(self):
         now = time.time()

@@ -112,6 +112,9 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         self._history: Deque[Tuple[float, int]] = deque(maxlen=(86400 // update_interval) + 1)
         # Last counter dnsdist reported, so a restart can be told from traffic
         self._last_raw: int | None = None
+        # Whose counter the history was built from. Not the base URL, so
+        # that turning TLS on does not throw a good history away.
+        self._history_source = f"{host}:{port}"
         self._history_dirty = False
         self._last_history_persist: float | None = None
         self._history_store = Store(
