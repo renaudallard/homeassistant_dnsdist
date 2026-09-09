@@ -128,6 +128,10 @@ Each host or group creates a Home Assistant device with these sensors:
 | `req_per_hour`, `req_per_day` | count | `MEASUREMENT` |
 | `security_status` | string | - |
 
+`cpu` covers user plus system time and is not capped at 100: dnsdist runs a
+thread per core, so a busy proxy on four cores legitimately reports up to 400.
+The card gauge tops out at 100 while the figure beside it stays exact.
+
 dnsdist keeps no single drop counter, so `drops` is the sum of `acl-drops`,
 `rule-drop`, `dyn-blocked`, `no-policy` and `noncompliant-queries`. `rule_drop`
 is part of that sum and keeps its own sensor as the per-rule breakdown.

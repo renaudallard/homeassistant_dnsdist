@@ -79,6 +79,7 @@ class TestZeroData:
             ATTR_UPTIME,
             ATTR_SECURITY_STATUS,
             "cpu_user_msec",
+            "cpu_sys_msec",
         ):
             assert key in data, f"Missing key: {key}"
 
@@ -126,6 +127,7 @@ class TestNormalize:
             ("cache-misses", 100),
             ("uptime", 3600),
             ("cpu-user-msec", 50000),
+            ("cpu-sys-msec", 20000),
             ("security-status", 1),
         )
         result = self.coord._normalize(stats)
@@ -138,6 +140,7 @@ class TestNormalize:
         assert result[ATTR_CACHE_MISSES] == 100
         assert result[ATTR_UPTIME] == 3600
         assert result["cpu_user_msec"] == 50000
+        assert result["cpu_sys_msec"] == 20000
         assert result[ATTR_SECURITY_STATUS] == "ok"
 
     def test_drops_sums_every_drop_counter(self):
@@ -172,6 +175,7 @@ class TestNormalize:
             ("cache_hits", 80),
             ("cache_misses", 20),
             ("cpu_user_msec", 12345),
+            ("cpu_sys_msec", 6789),
             ("security_status", 2),
         )
         result = self.coord._normalize(stats)
@@ -180,6 +184,7 @@ class TestNormalize:
         assert result[ATTR_CACHE_HITS] == 80
         assert result[ATTR_CACHE_MISSES] == 20
         assert result["cpu_user_msec"] == 12345
+        assert result["cpu_sys_msec"] == 6789
         assert result[ATTR_SECURITY_STATUS] == "warning"
 
     def test_cache_hitrate_calculated(self):

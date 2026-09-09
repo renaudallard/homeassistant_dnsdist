@@ -102,7 +102,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         self._verify_ssl = verify_ssl
         self._base_url = f"{'https' if use_https else 'http'}://{host}:{port}"
         # Track CPU deltas
-        self._last_cpu_user_msec: int | None = None
+        self._last_cpu_msec: int | None = None
         self._last_update_ts: float | None = None
         # Rolling history of (wallclock_ts, queries_counter) for rate sensors.
         # Capped at 24 hours worth of samples to bound memory usage.
@@ -191,19 +191,20 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         if previous_backends is not None and ATTR_BACKENDS not in normalized:
             normalized[ATTR_BACKENDS] = previous_backends
 
-        # --- Compute CPU % based on cpu-user-msec counter ---
+        # --- Compute CPU % from the user and system time counters ---
+        # dnsdist runs a thread per core, so the result is not capped at 100:
+        # a busy proxy on four cores legitimately reports up to 400.
         try:
-            cpu_user_msec = normalized.get("cpu_user_msec")
+            cpu_msec = normalized.get("cpu_user_msec", 0) + normalized.get("cpu_sys_msec", 0)
             now_mono = monotonic()
-            if isinstance(cpu_user_msec, (int, float)):
-                if self._last_cpu_user_msec is not None and self._last_update_ts is not None:
-                    delta_cpu = cpu_user_msec - self._last_cpu_user_msec
-                    delta_time = now_mono - self._last_update_ts
-                    if delta_time > 0 and delta_cpu >= 0:
-                        cpu_percent = ((delta_cpu / 1000.0) / delta_time) * 100
-                        normalized[ATTR_CPU] = round(max(0.0, min(cpu_percent, 100.0)), 2)
-                self._last_cpu_user_msec = int(cpu_user_msec)
-                self._last_update_ts = now_mono
+            if self._last_cpu_msec is not None and self._last_update_ts is not None:
+                delta_cpu = cpu_msec - self._last_cpu_msec
+                delta_time = now_mono - self._last_update_ts
+                if delta_time > 0 and delta_cpu >= 0:
+                    cpu_percent = ((delta_cpu / 1000.0) / delta_time) * 100
+                    normalized[ATTR_CPU] = round(max(0.0, cpu_percent), 2)
+            self._last_cpu_msec = int(cpu_msec)
+            self._last_update_ts = now_mono
         except Exception as err:
             _LOGGER.debug("[%s] CPU computation failed: %s", self._name, err)
 
@@ -243,7 +244,9 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
 
     def _zero_data(self) -> dict[str, Any]:
         data = make_zero_data()
-        data["cpu_user_msec"] = 0  # Host-specific field for CPU calculation
+        # Host-specific fields for the CPU calculation
+        data["cpu_user_msec"] = 0
+        data["cpu_sys_msec"] = 0
         return data
 
     def _normalize(self, stats: list[dict[str, Any]] | dict[str, Any]) -> dict[str, Any]:
@@ -276,6 +279,8 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                     normalized[ATTR_UPTIME] = int(val)
                 elif key in ("cpu-user-msec", "cpu_user_msec"):
                     normalized["cpu_user_msec"] = int(val)
+                elif key in ("cpu-sys-msec", "cpu_sys_msec"):
+                    normalized["cpu_sys_msec"] = int(val)
                 elif key in ("security-status", "security_status"):
                     sec = int(val)
                     normalized[ATTR_SECURITY_STATUS] = SECURITY_STATUS_MAP.get(sec, "unknown")
