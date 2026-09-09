@@ -104,7 +104,14 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
     @callback
     def _handle_reload_signal(self) -> None:
         """React to host addition/removal and trigger immediate refresh."""
-        _LOGGER.debug("[%s] Received reload signal — forcing refresh", self._name)
+        if self.hass.data.get(DOMAIN, {}).get(self._entry_id) is not self:
+            # Our own entry is on its way out. Unload drops us from hass.data
+            # before it sends the signal, while the listener only goes once the
+            # unload callbacks run, so the signal still reaches us here.
+            _LOGGER.debug("[%s] Ignoring reload signal, the entry is unloading", self._name)
+            return
+
+        _LOGGER.debug("[%s] Received reload signal, forcing refresh", self._name)
         self.hass.async_create_task(self.async_request_refresh())
 
     async def _async_update_data(self) -> dict[str, Any]:

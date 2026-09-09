@@ -117,6 +117,22 @@ def run_aggregation(coord, hass, members_map):
         return asyncio.run(coord._async_update_data())
 
 
+class TestReloadSignal:
+    def handle(self, registered):
+        coord, hass = make_group_coordinator()
+        hass.data[DOMAIN] = {"test-group": coord} if registered else {}
+        with patch.object(coord, "async_request_refresh", MagicMock()):
+            coord._handle_reload_signal()
+        return hass.async_create_task.called
+
+    def test_refreshes_while_the_entry_is_loaded(self):
+        assert self.handle(registered=True) is True
+
+    def test_ignores_the_signal_its_own_unload_sent(self):
+        """Unload pops us from hass.data before it sends the signal."""
+        assert self.handle(registered=False) is False
+
+
 class TestGroupAggregationCounters:
     def test_sums_all_counters(self):
         coord, hass = make_group_coordinator(members=["h1", "h2"])
