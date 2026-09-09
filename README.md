@@ -4,7 +4,7 @@
 
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.5.2-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.5.3-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -24,7 +24,7 @@ Monitor every proxy, surface aggregated insights, and clear caches over the REST
 |---|---|
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.5.2** |
+| **Current version** | **1.5.3** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [BSD 2-Clause](LICENSE) |
@@ -188,7 +188,7 @@ The integration includes a custom Lovelace card that is automatically registered
 
 ### Manual resource registration
 
-If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.2` as a JavaScript Module.
+If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.3` as a JavaScript Module.
 
 ### Usage
 
@@ -288,6 +288,15 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.5.3
+
+Both of these are as old as groups themselves, not new in 1.5.
+
+- Hold a group's last reading while one of its members is reloading. The group sums whichever members are loaded, so an entry unloading and loading again made the total fall for one poll. A `TOTAL_INCREASING` sensor reads a fall of more than ten percent as a meter reset, and Home Assistant then adds the whole value to the long term sum again, so a two or three host group gained a spurious cycle worth thousands of queries every time a member reloaded. The group now waits for every member the user still has configured to have a coordinator before it publishes. A member that is loaded but failing is deliberately not waited for, since that state can last and would freeze the group for good, and the filtering rule aggregate keeps its stricter gate because freezing a counter costs a stale figure where letting the rules shrink deletes entities
+- Report nothing rather than zero before a group has worked out its first aggregate. Entry setup order is not fixed, so on roughly half of all restarts the group published a zeroed dataset until its members loaded, and zero is a fall like any other. The counters now read unknown until every member is in, which the statistics skip
+
+The visible cost is that a group's metrics hold their previous values for a poll or two while a member entry reloads, instead of dropping and coming back. Member reachability sensors keep updating throughout, so the group device still shows which member is being waited for.
 
 ### 1.5.2
 
