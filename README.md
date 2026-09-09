@@ -100,7 +100,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 | **Update interval** | Polling frequency in seconds (default `30`) |
 | **Create filtering and dynamic rule sensors** | Disabled by default |
 
-Host validation enforces RFC 1123 hostnames plus IPv4/IPv6 literals.
+Host validation enforces RFC 1123 hostnames plus IPv4/IPv6 literals. IPv6 is stored bracketed, with or without the brackets typed in.
 Setup requires a valid dnsdist statistics JSON payload before finishing, so wrong URLs or non-dnsdist endpoints fail fast.
 
 ### Add a Group

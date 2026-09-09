@@ -93,10 +93,12 @@ def validate_host(host: str) -> str:
     if _IPV4_PATTERN.match(host):
         return host
 
-    # Check if it's a valid IPv6 address (with or without brackets)
+    # Check if it's a valid IPv6 address (with or without brackets).  Hand it
+    # back bracketed either way: the literal is pasted straight into a URL, and
+    # a bare one leaves the port unparseable.
     host_unwrapped = host.strip("[]")
     if _IPV6_PATTERN.match(host_unwrapped):
-        return host
+        return f"[{host_unwrapped}]"
 
     # Reject strings that look like malformed IPv4 addresses
     # (all-numeric labels separated by dots)
