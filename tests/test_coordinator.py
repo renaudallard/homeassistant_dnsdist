@@ -135,6 +135,11 @@ class TestZeroData:
         assert coord._history.maxlen == (86400 // 600) + 1
 
 
+class TestReachable:
+    def test_unknown_before_the_first_poll(self):
+        assert make_coordinator().reachable is None
+
+
 class TestComputeRates:
     def rates(self, samples, now_ts, query_count):
         coord = make_coordinator()

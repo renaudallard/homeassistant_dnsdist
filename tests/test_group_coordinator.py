@@ -153,6 +153,12 @@ class TestMemberStates:
         states = self.states(["h1"], {"e1": make_member("h1", {}, reachable=False)})
         assert states["h1"]["reachable"] is False
 
+    def test_a_member_that_has_not_polled_yet_reports_nothing(self):
+        """A group can poll before a member has, which is not a failure."""
+        states = self.states(["h1"], {"e1": make_member("h1", {}, reachable=None)})
+        assert states["h1"]["reachable"] is None
+        assert states["h1"]["loaded"] is True
+
     def test_a_member_with_no_coordinator_reports_nothing(self):
         """Unloaded, disabled or deleted is not the same as unreachable."""
         states = self.states(["h1"], {})

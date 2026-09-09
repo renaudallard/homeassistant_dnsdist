@@ -101,8 +101,9 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         self._use_https = use_https
         self._verify_ssl = verify_ssl
         self._base_url = f"{'https' if use_https else 'http'}://{host}:{port}"
-        # Whether the last poll of the statistics endpoint got an answer
-        self._reachable = False
+        # Whether the last poll of the statistics endpoint got an answer, and
+        # None until there has been one: a group can poll us before we start.
+        self._reachable: bool | None = None
         # Track CPU deltas
         self._last_cpu_msec: int | None = None
         self._last_update_ts: float | None = None
@@ -251,8 +252,8 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         return normalized
 
     @property
-    def reachable(self) -> bool:
-        """Say whether the last poll of the statistics endpoint got an answer."""
+    def reachable(self) -> bool | None:
+        """Say whether the last poll got an answer, or None before the first."""
         return self._reachable
 
     def _zero_data(self) -> dict[str, Any]:
