@@ -62,6 +62,8 @@ from .const import (
     ATTR_RULE_DROP,
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
+    CONF_IS_GROUP,
+    CONF_MEMBERS,
     CONF_NAME,
     DOMAIN,
     DYNAMIC_ENTITY_PREFIXES,
@@ -107,6 +109,16 @@ def coerce_int(value: Any) -> int:
     except (TypeError, ValueError):
         return 0
     return 0
+
+
+def is_group_entry(entry: ConfigEntry) -> bool:
+    """Say whether a config entry describes a group rather than a host.
+
+    Entries predating the flag carry nothing but the member list, and setup has
+    always read those as groups, so everything else has to agree or the entities
+    end up on a host shaped device the rest of the code never looks for.
+    """
+    return bool(entry.data.get(CONF_IS_GROUP) or entry.data.get(CONF_MEMBERS))
 
 
 def name_is_taken(hass: HomeAssistant, name: str, *, entry_id: str | None = None) -> bool:

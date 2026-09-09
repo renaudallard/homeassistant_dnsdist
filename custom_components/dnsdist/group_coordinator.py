@@ -54,14 +54,13 @@ from .const import (
     ATTR_RULE_DROP,
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
-    CONF_IS_GROUP,
     CONF_NAME,
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
-from .utils import HistoryMixin, coerce_int, make_zero_data, slugify_rule
+from .utils import HistoryMixin, coerce_int, is_group_entry, make_zero_data, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -299,7 +298,7 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
         configured = {
             entry.data.get(CONF_NAME, entry.title)
             for entry in self.hass.config_entries.async_entries(DOMAIN)
-            if not entry.data.get(CONF_IS_GROUP) and not entry.disabled_by
+            if not is_group_entry(entry) and not entry.disabled_by
         }
         return [member for member in self._members if member in configured]
 

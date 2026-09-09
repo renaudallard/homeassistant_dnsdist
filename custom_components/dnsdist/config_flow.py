@@ -52,7 +52,7 @@ from .const import (
     CONF_IS_GROUP,
     CONF_INCLUDE_FILTER_SENSORS,
 )
-from .utils import name_is_taken
+from .utils import is_group_entry, name_is_taken
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -319,7 +319,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             user_input = {k: v for k, v in user_input.items() if k in expected_keys}
 
         # Determine available host names from existing host entries
-        entries = [e for e in self._async_current_entries() if not e.data.get(CONF_IS_GROUP)]
+        entries = [e for e in self._async_current_entries() if not is_group_entry(e)]
         available_hosts = {e.data.get(CONF_NAME, e.title) for e in entries}
         if not available_hosts:
             errors["base"] = "no_hosts"
@@ -365,7 +365,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         assert entry is not None
         data = entry.data
 
-        if data.get(CONF_IS_GROUP):
+        if is_group_entry(entry):
             return self.async_abort(reason="reconfigure_not_supported")
 
         errors: dict[str, str] = {}

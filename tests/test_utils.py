@@ -25,9 +25,13 @@
 
 """Tests for utility functions."""
 
+from types import SimpleNamespace
+
+from custom_components.dnsdist.const import CONF_IS_GROUP, CONF_MEMBERS
 from custom_components.dnsdist.utils import (
     coerce_int,
     compute_window_total,
+    is_group_entry,
     slugify_rule,
 )
 
@@ -60,6 +64,29 @@ class TestCoerceInt:
         assert coerce_int("") == 0
         assert coerce_int([]) == 0
         assert coerce_int({}) == 0
+
+
+class TestIsGroupEntry:
+    """Tests for is_group_entry function."""
+
+    def entry(self, **data):
+        return SimpleNamespace(data=data)
+
+    def test_flag_marks_a_group(self):
+        assert is_group_entry(self.entry(**{CONF_IS_GROUP: True})) is True
+
+    def test_members_alone_mark_a_group(self):
+        """Entries predating the flag carry nothing but the member list."""
+        assert is_group_entry(self.entry(**{CONF_MEMBERS: ["dns1"]})) is True
+
+    def test_a_host_is_not_a_group(self):
+        assert is_group_entry(self.entry(host="10.0.0.1")) is False
+
+    def test_a_host_with_the_flag_off_is_not_a_group(self):
+        assert is_group_entry(self.entry(**{CONF_IS_GROUP: False})) is False
+
+    def test_an_empty_member_list_is_not_a_group(self):
+        assert is_group_entry(self.entry(**{CONF_MEMBERS: []})) is False
 
 
 class TestSlugifyRule:

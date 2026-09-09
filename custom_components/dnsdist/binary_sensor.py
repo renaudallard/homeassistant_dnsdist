@@ -41,8 +41,8 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ATTR_BACKENDS, CONF_IS_GROUP, DOMAIN
-from .utils import async_register_slug_platform, build_device_info
+from .const import ATTR_BACKENDS, DOMAIN
+from .utils import async_register_slug_platform, build_device_info, is_group_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up dnsdist backend binary sensors for a host."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    is_group = bool(entry.data.get(CONF_IS_GROUP))
+    is_group = is_group_entry(entry)
 
     if is_group:
         return

@@ -53,7 +53,6 @@ from .const import (
     CONF_VERIFY_SSL,
     CONF_UPDATE_INTERVAL,
     CONF_MEMBERS,
-    CONF_IS_GROUP,
     DEFAULT_UPDATE_INTERVAL,
     SERVICE_CLEAR_CACHE,
     STORAGE_KEY_HISTORY,
@@ -74,6 +73,7 @@ from .utils import (
     async_prune_orphaned_entities,
     async_remove_retired_entities,
     device_identifier,
+    is_group_entry,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -202,7 +202,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await register_dnsdist_services(hass)
 
     data: dict[str, Any] = dict(entry.data)
-    is_group = bool(data.get(CONF_IS_GROUP, False) or data.get(CONF_MEMBERS))
+    is_group = is_group_entry(entry)
     update_interval = int(data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
     name = data.get(CONF_NAME) or entry.title
 
@@ -293,7 +293,7 @@ async def async_remove_config_entry_device(hass: HomeAssistant, entry: ConfigEnt
     Devices are keyed on the display name, so renaming one leaves the old
     device behind.  Without this the UI offers no way to delete it.
     """
-    is_group = bool(entry.data.get(CONF_IS_GROUP, False) or entry.data.get(CONF_MEMBERS))
+    is_group = is_group_entry(entry)
     name = entry.data.get(CONF_NAME) or entry.title
     return (DOMAIN, device_identifier(name, is_group)) not in device.identifiers
 

@@ -35,6 +35,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN, CONF_API_KEY
+from .utils import is_group_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     data = dict(entry.data)
     diagnostics: dict[str, Any] = {
         "config": async_redact_data(data, TO_REDACT),
-        "entry_type": "group" if data.get("is_group") else "host",
+        "entry_type": "group" if is_group_entry(entry) else "host",
     }
 
     coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)

@@ -61,12 +61,11 @@ from .const import (
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
     CONF_INCLUDE_FILTER_SENSORS,
-    CONF_IS_GROUP,
     DOMAIN,
     SECURITY_STATUS_CODE,
     SECURITY_STATUS_LABEL,
 )
-from .utils import async_register_slug_platform, build_device_info
+from .utils import async_register_slug_platform, build_device_info, is_group_entry
 
 # COUNT constant for sensor units - use HA's COUNT if available, otherwise fallback
 COUNT = getattr(ha_const, "COUNT", "count")
@@ -78,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     """Set up dnsdist sensors for a host or group."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     sensors: list[DnsdistSensor] = []
-    is_group = bool(entry.data.get(CONF_IS_GROUP))
+    is_group = is_group_entry(entry)
     include_filter_sensors = bool(entry.data.get(CONF_INCLUDE_FILTER_SENSORS, bool(is_group)))
 
     # NOTE: Labels below are metric-only. HA will prefix with device (host/group) name

@@ -40,12 +40,11 @@ from .const import (
     DOMAIN,
     CONF_NAME,
     CONF_UPDATE_INTERVAL,
-    CONF_IS_GROUP,
     CONF_MEMBERS,
     CONF_INCLUDE_FILTER_SENSORS,
     CONF_REMOVE_DISABLED_FILTER_SENSORS,
 )
-from .utils import name_is_taken
+from .utils import is_group_entry, name_is_taken
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,14 +56,14 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Manage the options."""
         data = self.config_entry.data
-        is_group = bool(data.get(CONF_IS_GROUP))
+        is_group = is_group_entry(self.config_entry)
         name = data.get(CONF_NAME, self.config_entry.title)
         update_interval = int(data.get(CONF_UPDATE_INTERVAL, 30))
         members = list(data.get(CONF_MEMBERS, []))
         include_filter_sensors = bool(data.get(CONF_INCLUDE_FILTER_SENSORS, bool(is_group)))
 
         # Build available hosts from other host entries
-        entries = [e for e in self.hass.config_entries.async_entries(DOMAIN) if not e.data.get(CONF_IS_GROUP)]
+        entries = [e for e in self.hass.config_entries.async_entries(DOMAIN) if not is_group_entry(e)]
         available_hosts = sorted({e.data.get(CONF_NAME, e.title) for e in entries})
 
         errors: dict[str, str] = {}
@@ -165,7 +164,7 @@ def _rename_group_members(hass, old_name: str, new_name: str) -> None:
     """
 
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if not entry.data.get(CONF_IS_GROUP):
+        if not is_group_entry(entry):
             continue
 
         members = list(entry.data.get(CONF_MEMBERS, []))

@@ -38,8 +38,8 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_IS_GROUP, CONF_MEMBERS, DOMAIN
-from .utils import build_device_info
+from .const import CONF_MEMBERS, DOMAIN
+from .utils import build_device_info, is_group_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
     """Set up dnsdist action buttons for a host or group."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    is_group = bool(entry.data.get(CONF_IS_GROUP))
+    is_group = is_group_entry(entry)
     members: list[str] = list(entry.data.get(CONF_MEMBERS, [])) if is_group else []
 
     entities: list[DnsdistActionButton] = [
