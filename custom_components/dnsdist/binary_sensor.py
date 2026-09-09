@@ -41,18 +41,29 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ATTR_BACKENDS, DOMAIN
+from .const import ATTR_BACKENDS, ATTR_MEMBERS, DOMAIN
 from .utils import async_register_slug_platform, build_device_info, is_group_entry
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Set up dnsdist backend binary sensors for a host."""
+    """Set up backend health for a host, or member reachability for a group."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    is_group = is_group_entry(entry)
 
-    if is_group:
+    if is_group_entry(entry):
+        async_register_slug_platform(
+            hass,
+            entry,
+            coordinator,
+            async_add_entities,
+            data_key=ATTR_MEMBERS,
+            factory=lambda slug: DnsdistMemberBinarySensor(
+                coordinator=coordinator,
+                entry_id=entry.entry_id,
+                member_slug=slug,
+            ),
+        )
         return
 
     async_register_slug_platform(
@@ -119,3 +130,49 @@ class DnsdistBackendBinarySensor(CoordinatorEntity, BinarySensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return build_device_info(self.coordinator, False)
+
+
+class DnsdistMemberBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor tracking whether a group member is still answering.
+
+    A host that stops answering keeps publishing its last known figures, so
+    without this the group would go on aggregating a dead member in silence.
+    """
+
+    _attr_has_entity_name = False
+    _attr_should_poll = False
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, *, coordinator, entry_id: str, member_slug: str) -> None:
+        super().__init__(coordinator)
+        self._slug = member_slug
+        self._attr_unique_id = f"{entry_id}:member:{member_slug}"
+
+    def _member_data(self) -> dict[str, Any]:
+        data = self.coordinator.data or {}
+        members = data.get(ATTR_MEMBERS, {}) if isinstance(data, dict) else {}
+        if isinstance(members, dict):
+            return members.get(self._slug, {})
+        return {}
+
+    @property
+    def name(self) -> str:
+        group = getattr(self.coordinator, "_name", "dnsdist")
+        member = self._member_data().get("name") or self._slug
+        return f"{group} Member {member}"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Report None while the member entry is not loaded, which is not a failure."""
+        reachable = self._member_data().get("reachable")
+        return reachable if isinstance(reachable, bool) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        member = self._member_data()
+        return {key: member[key] for key in ("name", "loaded") if key in member}
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return build_device_info(self.coordinator, True)

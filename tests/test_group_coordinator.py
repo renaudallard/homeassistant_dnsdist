@@ -38,6 +38,7 @@ from custom_components.dnsdist.const import (
     ATTR_DROPS,
     ATTR_DYNAMIC_RULES,
     ATTR_FILTERING_RULES,
+    ATTR_MEMBERS,
     ATTR_QUERIES,
     ATTR_RESPONSES,
     ATTR_RULE_DROP,
@@ -81,11 +82,13 @@ def make_group_coordinator(members=None, configured=None):
     return coord, hass
 
 
-def make_member(name, data, success=True):
+def make_member(name, data, success=True, reachable=True):
     c = MagicMock()
     c._name = name
+    c._host = "10.0.0.1"
     c.last_update_success = success
     c.data = data
+    c.reachable = reachable
     return c
 
 
@@ -131,6 +134,49 @@ class TestReloadSignal:
     def test_ignores_the_signal_its_own_unload_sent(self):
         """Unload pops us from hass.data before it sends the signal."""
         assert self.handle(registered=False) is False
+
+
+class TestMemberStates:
+    def states(self, members, coords):
+        coord, _ = make_group_coordinator(members=members)
+        return coord._member_states(coords)
+
+    def test_reports_every_configured_member(self):
+        coords = {"e1": make_member("h1", {}), "e2": make_member("h2", {})}
+        assert sorted(self.states(["h1", "h2"], coords)) == ["h1", "h2"]
+
+    def test_a_member_that_answers_is_on(self):
+        states = self.states(["h1"], {"e1": make_member("h1", {}, reachable=True)})
+        assert states["h1"]["reachable"] is True
+
+    def test_a_member_that_does_not_answer_is_off(self):
+        states = self.states(["h1"], {"e1": make_member("h1", {}, reachable=False)})
+        assert states["h1"]["reachable"] is False
+
+    def test_a_member_with_no_coordinator_reports_nothing(self):
+        """Unloaded, disabled or deleted is not the same as unreachable."""
+        states = self.states(["h1"], {})
+        assert states["h1"]["reachable"] is None
+        assert states["h1"]["loaded"] is False
+
+    def test_the_display_name_survives_the_slug(self):
+        states = self.states(["DNS 1"], {"e1": make_member("DNS 1", {})})
+        assert states["dns-1"]["name"] == "DNS 1"
+
+    def test_a_group_coordinator_is_not_a_member(self):
+        other_group = MagicMock(spec=["_name", "reachable"])
+        other_group._name = "h1"
+        assert self.states(["h1"], {"e1": other_group})["h1"]["loaded"] is False
+
+    def test_the_aggregate_carries_the_member_states(self):
+        coord, hass = make_group_coordinator(members=["h1"])
+        result = run_aggregation(coord, hass, {"e1": make_member("h1", base_data())})
+        assert result[ATTR_MEMBERS]["h1"]["reachable"] is True
+
+    def test_member_states_survive_having_no_active_members(self):
+        coord, hass = make_group_coordinator(members=["h1"])
+        result = run_aggregation(coord, hass, {"e1": make_member("h1", base_data(), success=False)})
+        assert result[ATTR_MEMBERS]["h1"]["reachable"] is True
 
 
 class TestGroupAggregationCounters:

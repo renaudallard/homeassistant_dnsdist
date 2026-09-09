@@ -141,6 +141,7 @@ class TestSplitDynamicUniqueId:
             "dynamic_rule:192-0-2-1-32": ("dynamic_rule:", "192-0-2-1-32"),
             "backend:resolver": ("backend:", "resolver"),
             "backend_queries:resolver": ("backend_queries:", "resolver"),
+            "member:dns-1": ("member:", "dns-1"),
         }
         for tail, expected in cases.items():
             assert split_dynamic_unique_id(f"{ENTRY_ID}:{tail}", ENTRY_ID) == expected

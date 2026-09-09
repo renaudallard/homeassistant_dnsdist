@@ -54,6 +54,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 - **Multiple hosts**, each dnsdist endpoint becomes its own device
 - **Aggregated groups** with smart rollups (sum counters, average CPU, max uptime, priority security status)
 - **Backend monitoring** with per-backend health (binary sensor) and query counters
+- **Member reachability** with one binary sensor per group member, so a host that stops answering is visible
 - **Filtering rule sensors** for per-rule match counts with idle/active icons
 - **Dynamic rule sensors** for temporary blocks (dynblocks) from rate limiting and DoS protection
 - **Custom Lovelace card** with gauges, counters, filtering rules, and dynamic rules
@@ -114,6 +115,13 @@ Setup requires a valid dnsdist statistics JSON payload before finishing, so wron
 
 Group rollups: **sum** (counters), **avg** (CPU %), **max** (uptime), and priority **security status** (critical > warning > ok > unknown).
 
+A host that stops answering keeps publishing its last known figures rather than
+going unavailable, so the group would otherwise aggregate a dead member without
+saying so. Each group therefore carries one `Member <host>` binary sensor per
+member, on for a host that answered its last poll and off for one that did not.
+A member whose entry is unloaded, disabled or deleted reports nothing at all,
+since that is not the same as a host refusing to answer.
+
 ---
 
 ## Entities
@@ -144,6 +152,7 @@ Additional dynamic entities (created per backend / per rule):
 | `Backend <address> Queries` | sensor | Per-backend query counter (`TOTAL_INCREASING`) |
 | `Filter <rule name>` | sensor | Per-rule match count with idle/active icons |
 | `Dynblock <network>` | sensor | Block count with reason, action, time remaining |
+| `Member <host>` | binary sensor | Group only: whether that member answered its last poll |
 
 > Request rates start out scaled up from whatever history exists. Once an hour of history has built up,
 > the hourly figure becomes a real count over the trailing hour. The daily figure stays scaled from the

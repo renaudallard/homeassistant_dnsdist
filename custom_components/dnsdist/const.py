@@ -84,6 +84,7 @@ DROP_STATS = (
 ATTR_FILTERING_RULES = "filtering_rules"
 ATTR_DYNAMIC_RULES = "dynamic_rules"
 ATTR_BACKENDS = "backends"
+ATTR_MEMBERS = "members"
 
 # Unique ID prefixes of the entities created on the fly, mapped to the
 # coordinator data key holding the slugs that are still live.  Used to spot
@@ -93,6 +94,7 @@ DYNAMIC_ENTITY_PREFIXES = {
     "dynamic_rule:": ATTR_DYNAMIC_RULES,
     "backend:": ATTR_BACKENDS,
     "backend_queries:": ATTR_BACKENDS,
+    "member:": ATTR_MEMBERS,
 }
 
 # Unique ID prefixes of entities the integration used to create and no longer

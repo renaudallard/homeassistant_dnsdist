@@ -47,6 +47,7 @@ from .const import (
     ATTR_DROPS,
     ATTR_DYNAMIC_RULES,
     ATTR_FILTERING_RULES,
+    ATTR_MEMBERS,
     ATTR_QUERIES,
     ATTR_REQ_PER_DAY,
     ATTR_REQ_PER_HOUR,
@@ -119,8 +120,10 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
         await self._async_ensure_history_loaded()
         try:
             all_coords = self.hass.data.get(DOMAIN, {})
+            member_states = self._member_states(all_coords)
+
             if not all_coords:
-                return self._last_data
+                return {**self._last_data, ATTR_MEMBERS: member_states}
 
             active_members = []
 
@@ -132,7 +135,7 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
 
             if not active_members:
                 _LOGGER.debug("[%s] No active members yet", self._name)
-                return self._last_data
+                return {**self._last_data, ATTR_MEMBERS: member_states}
 
             totals = {
                 ATTR_QUERIES: 0,
@@ -254,6 +257,7 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                 ATTR_CPU: avg_cpu,
                 ATTR_UPTIME: max_uptime,
                 ATTR_SECURITY_STATUS: sec_status,
+                ATTR_MEMBERS: member_states,
             }
 
             # The aggregate may only shrink once every member is present and
@@ -294,6 +298,26 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
         except Exception as err:
             _LOGGER.warning("[%s] Aggregation error: %s", self._name, err)
             return self._last_data
+
+    def _member_states(self, all_coords: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """Report on each configured member, keyed by slug.
+
+        A member with no coordinator has an entry that is unloaded, disabled or
+        gone, which is not the same as a host that will not answer, so it
+        reports nothing rather than a failure.
+        """
+        hosts = {coord._name: coord for coord in all_coords.values() if hasattr(coord, "_host")}
+
+        states: dict[str, dict[str, Any]] = {}
+        for member in self._members:
+            coord = hosts.get(member)
+            states[slugify_rule(member)] = {
+                "name": member,
+                "reachable": coord.reachable if coord is not None else None,
+                "loaded": coord is not None,
+            }
+
+        return states
 
     def _expected_members(self) -> list[str]:
         """Return the members that still have a host entry in Home Assistant.
