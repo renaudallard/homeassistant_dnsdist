@@ -4,7 +4,7 @@
 
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.5.1-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.5.2-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -24,7 +24,7 @@ Monitor every proxy, surface aggregated insights, and clear caches over the REST
 |---|---|
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.5.1** |
+| **Current version** | **1.5.2** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [BSD 2-Clause](LICENSE) |
@@ -188,7 +188,7 @@ The integration includes a custom Lovelace card that is automatically registered
 
 ### Manual resource registration
 
-If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.1` as a JavaScript Module.
+If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.2` as a JavaScript Module.
 
 ### Usage
 
@@ -288,6 +288,13 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.5.2
+
+Both of these landed in 1.5.1 and affect only that release.
+
+- Do not carry a rate history over to a different dnsdist. Reconfigure keeps the entry and therefore keeps its store, and the lower counter of the new box was read as a restart, which put its whole lifetime into a single interval: five million queries in one poll, and an hourly rate to match for the next day. The history now records which host it was collected from and is dropped when that changes. It is keyed on host and port rather than the base URL, so turning TLS on keeps a good history
+- Let an unreachable member drop out of a group's request rates. A host that cannot be reached goes on publishing its last known figures, which is deliberate, but its rate was still being added to the group for as long as it stayed dead. Counters carry forward as before, they describe traffic that really happened, but the rates now lapse with the host
 
 ### 1.5.1
 - Keep the request rate history through a dnsdist restart. It held the counter dnsdist reports, so a restart made the counter fall and the only way to read that was to throw the whole 24 hours away and rebuild it over another day. It now holds the traffic watched go past, so a restart costs the one poll interval it happened in. The last counter seen is stored alongside it, so traffic served while Home Assistant was down is still counted
