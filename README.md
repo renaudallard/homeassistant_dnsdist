@@ -206,7 +206,7 @@ A visual configuration editor is also available through the Lovelace UI.
 
 From the integration options panel:
 
-- Rename a host or group
+- Rename a host or group, with any group that lists the host following the new name
 - Tune the update interval
 - Add or remove group members
 - Toggle filtering and dynamic rule sensors (hosts default off, groups default on)

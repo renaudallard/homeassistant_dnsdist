@@ -88,6 +88,8 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
             new_name = user_input.get(CONF_NAME, name)
             if isinstance(new_name, str) and new_name:
                 new_data[CONF_NAME] = new_name
+            else:
+                new_name = name
 
             # Update group-specific members
             if is_group:
@@ -102,6 +104,9 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
                 # would delete the sensors anyway.
                 if include_filter_sensors and not new_include_filters and remove_on_disable:
                     _remove_rule_entities(self.hass, self.config_entry.entry_id)
+
+                if not is_group and new_name != name:
+                    _rename_group_members(self.hass, name, new_name)
 
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
@@ -146,6 +151,26 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
             )
 
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+
+
+def _rename_group_members(hass, old_name: str, new_name: str) -> None:
+    """Carry a host rename into the groups that list it.
+
+    Group membership is stored as display names, so a renamed host silently
+    falls out of every group it belonged to unless the lists follow it.
+    """
+
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if not entry.data.get(CONF_IS_GROUP):
+            continue
+
+        members = list(entry.data.get(CONF_MEMBERS, []))
+        if old_name not in members:
+            continue
+
+        renamed = [new_name if member == old_name else member for member in members]
+        _LOGGER.debug("[dnsdist] Group '%s' now points at '%s'", entry.title, new_name)
+        hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_MEMBERS: renamed})
 
 
 def _remove_rule_entities(hass, entry_id: str) -> None:
