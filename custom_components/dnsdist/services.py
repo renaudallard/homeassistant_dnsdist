@@ -129,7 +129,17 @@ async def register_dnsdist_services(hass: HomeAssistant):
     async def handle_clear_cache(call: ServiceCall):
         pool = call.data.get("pool", "")
         target = call.data.get("host")
-        for coord in _host_targets(hass, target):
+
+        coords = _host_targets(hass, target)
+        if not coords:
+            # Saying nothing at all looks exactly like a cache that was cleared.
+            if target:
+                _LOGGER.warning("[dnsdist] clear_cache found no host called '%s'", target)
+            else:
+                _LOGGER.warning("[dnsdist] clear_cache found no dnsdist hosts to clear")
+            return
+
+        for coord in coords:
             status, _ = await _call_dnsdist_api(
                 coord,
                 "DELETE",
