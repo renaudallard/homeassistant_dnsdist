@@ -4,7 +4,7 @@
 
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.5.0-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.5.1-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -24,7 +24,7 @@ Monitor every proxy, surface aggregated insights, and clear caches over the REST
 |---|---|
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.5.0** |
+| **Current version** | **1.5.1** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [BSD 2-Clause](LICENSE) |
@@ -188,7 +188,7 @@ The integration includes a custom Lovelace card that is automatically registered
 
 ### Manual resource registration
 
-If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.0` as a JavaScript Module.
+If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.1` as a JavaScript Module.
 
 ### Usage
 
@@ -288,6 +288,13 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.5.1
+- Keep the request rate history through a dnsdist restart. It held the counter dnsdist reports, so a restart made the counter fall and the only way to read that was to throw the whole 24 hours away and rebuild it over another day. It now holds the traffic watched go past, so a restart costs the one poll interval it happened in. The last counter seen is stored alongside it, so traffic served while Home Assistant was down is still counted
+- Groups keep no request history of their own and add up the rates their members work out instead. A counter summed across changing membership cannot be told apart from traffic, so any one member restarting used to zero the group's hourly and daily figures. An upgraded group leaves its old history file behind in `.storage`, which is deleted if the group entry is ever removed
+- Compare entry names as slugs when checking for a duplicate, so "DNS1" and "dns1" are no longer both accepted. Group membership keys on the slug of the name, so a group listing that pair showed only one of them and the other host lost its reachability sensor
+- Correct four things the README had wrong: the rate sensors are in req/h and req/d rather than counts, the member sensor also reports nothing before its first poll, stale rule and dynblock entities go on the next poll rather than waiting for a reload, and only `clear_cache` is left to promise
+- Cover the history save and load path, which had no tests at all
 
 ### 1.5.0
 
