@@ -149,10 +149,6 @@ export const cardStyles = css`
     text-align: left;
   }
 
-  .gauge-arc-path {
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
-  }
-
   .gauge-needle-group {
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -494,40 +490,5 @@ export const cardStyles = css`
 
   .confirm-confirm {
     background: var(--dnsdist-error);
-  }
-`;
-
-export const editorStyles = css`
-  :host {
-    display: block;
-  }
-
-  .form-group {
-    margin-bottom: 16px;
-  }
-
-  .form-label {
-    display: block;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--primary-text-color);
-    margin-bottom: 4px;
-  }
-
-  .form-hint {
-    font-size: 0.75rem;
-    color: var(--secondary-text-color);
-    margin-top: 2px;
-  }
-
-  ha-textfield,
-  ha-select {
-    display: block;
-    width: 100%;
-  }
-
-  ha-formfield {
-    display: block;
-    margin-bottom: 8px;
   }
 `;
