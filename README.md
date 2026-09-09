@@ -4,7 +4,7 @@
 
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.4.3-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.5.0-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -24,7 +24,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 |---|---|
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.4.3** |
+| **Current version** | **1.5.0** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [BSD 2-Clause](LICENSE) |
@@ -184,7 +184,7 @@ The integration includes a custom Lovelace card that is automatically registered
 
 ### Manual resource registration
 
-If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.4.3` as a JavaScript Module.
+If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.0` as a JavaScript Module.
 
 ### Usage
 
@@ -284,6 +284,41 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.5.0
+
+Breaking:
+- Remove the backend enable/disable switches. dnsdist serves its API from an exact-path handler table and allows a write on nothing but the cache and the ACL, so every toggle came back 405 and the state read compared against "off", which dnsdist never reports. The leftover entities are deleted from the registry on the first startup after the upgrade, so a dashboard card pointing at one needs removing
+- Remove the `enable_server`, `disable_server` and `get_backends` services for the same reason. The first two were rejected with 405 and the third asked for `/api/v1/servers`, which is not a route dnsdist has. An automation calling one now fails instead of quietly doing nothing
+- The per-backend `drops` attribute is now `send_errors`, taken from the `sendErrors` counter dnsdist actually keeps. The old name matched no field in the server JSON and always read zero
+- `cpu` now counts system time as well as user time and is no longer capped at 100, because dnsdist runs a thread per core. A gauge card pinned to a maximum of 100 will peg on a busy host
+- `drops` was reading a statistic dnsdist has never had and sat at zero on every version. It is now the sum of `acl-drops`, `rule-drop`, `dyn-blocked`, `no-policy` and `noncompliant-queries`, so the sensor steps up from a flat line
+
+Added:
+- A connectivity binary sensor per group member, so a host that stops answering is visible instead of the group aggregating its last known figures in silence. A member whose entry is unloaded, disabled or deleted reports unknown rather than disconnected
+- Reject a host or group name another entry already uses, since the name keys the device and picks the target of the services
+- A rename now follows through into every group that lists the host, instead of silently dropping it from the aggregate
+
+Fixed:
+- Bracket a bare IPv6 host so the API URL parses. `2001:db8::1` was accepted at setup and then produced an unparseable URL, which setup blamed on the connection
+- Let a group shrink again when a member is disabled. A disabled entry counted towards the quorum it could never satisfy, freezing the group's rule and dynblock sensors for good
+- Stop a group refreshing itself while it is being unloaded, which ran an aggregation against a torn down coordinator and could rewrite a history file that had just been deleted
+- Treat an unreadable dynblock response as unread rather than empty. An empty mapping is the signal that dnsdist has no dynamic blocks left, so anything but a JSON object deleted every dynblock sensor
+- Keep one unreadable statistic from taking down every statistic after it
+- Ignore a CPU reading with no counters in it, which used to rebase the baseline and spike the next poll
+- Space the request history writes 5 minutes apart and hand them to the store. The throttle matched the default poll interval, so up to 2881 samples were rewritten to disk on nearly every cycle
+- Match a `clear_cache` host by its entity ID spelling as well as its display name, and say so when the name matches nothing
+- Give a rejected form back the values that were typed into it
+- Do not try to remove an entity that has not finished being added
+- Stop the card claiming entities that only look vaguely like rules; an unrelated sensor carrying an `action` attribute could land in the filtering rules list
+- Drop the daily rate branch that could never run, and stop the rate going negative after a counter reset
+
+Internal:
+- One shared answer to whether an entry is a host or a group, which setup and the platforms used to spell differently
+- Drop a diagnostics hook Home Assistant never calls, a button attribute that does not exist, a card option nothing read, and the styles and strings behind them
+- Keep the bookkeeping flag for service registration out of the coordinator map
+- Raise the HACS minimum to 2025.10, which is what the code has wanted for a while
+- Pin the ruff target to py313 so the formatter stops proposing 3.14 only syntax, and run both ruff steps over the tests in CI
 
 ### 1.4.3
 - Remove filtering rule, dynblock and backend entities once their dnsdist object is gone, including at startup for anything that disappeared while Home Assistant was stopped
