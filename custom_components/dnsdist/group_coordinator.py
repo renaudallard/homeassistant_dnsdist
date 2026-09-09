@@ -56,7 +56,7 @@ from .const import (
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
 )
-from .utils import coerce_int, is_group_entry, make_zero_data, slugify_rule
+from .utils import coerce_int, is_group_entry, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,7 +83,12 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._name = name
         self._entry_id = entry_id
         self._members = members or []
-        self._last_data: dict[str, Any] = self._zero_data()
+        # Empty until the first aggregate the group has actually worked out.
+        # Publishing zeros instead would make the counters read zero whenever
+        # the group loads before its members, and a TOTAL_INCREASING sensor
+        # dropping to zero restarts the long term statistics. With the key
+        # simply absent the sensor reads unknown, which the statistics skip.
+        self._last_data: dict[str, Any] = {}
         self._unsub_dispatcher = async_dispatcher_connect(hass, SIGNAL_DNSDIST_RELOAD, self._handle_reload_signal)
         _LOGGER.info("Initialized dnsdist group '%s' with members: %s", name, ", ".join(self._members))
 
@@ -368,7 +373,3 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             aggregated[key] = value
         elif isinstance(previous, dict):
             aggregated[key] = previous
-
-    def _zero_data(self) -> dict[str, Any]:
-        """Provide a valid zeroed dataset so sensors stay available."""
-        return make_zero_data()

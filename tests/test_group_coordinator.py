@@ -416,12 +416,17 @@ class TestGroupAggregationCacheHitrate:
 
 
 class TestGroupAggregationMemberFiltering:
-    def test_no_active_members_returns_last_data(self):
+    def test_nothing_is_reported_before_the_first_aggregate(self):
+        """Zero would read as a meter reset, an absent key reads as unknown."""
         coord, hass = make_group_coordinator(members=["h1"])
-        # No coordinators in hass.data
         result = run_aggregation(coord, hass, {})
-        # Returns _last_data which is zero_data()
-        assert result[ATTR_QUERIES] == 0
+        assert ATTR_QUERIES not in result
+        assert result[ATTR_MEMBERS]["h1"]["loaded"] is False
+
+    def test_the_last_aggregate_is_held_once_there_is_one(self):
+        coord, hass = make_group_coordinator(members=["h1"])
+        assert run_aggregation(coord, hass, {"e1": make_member("h1", base_data(queries=70))})[ATTR_QUERIES] == 70
+        assert run_aggregation(coord, hass, {})[ATTR_QUERIES] == 70
 
     def test_skips_non_member_coordinator(self):
         coord, hass = make_group_coordinator(members=["h1"])

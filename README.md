@@ -255,7 +255,7 @@ Each host and group device also exposes a **Clear Cache** button. Group presses 
 | Symptom | Resolution |
 |---|---|
 | **Request timed out after 10s** | The dnsdist host did not respond in time. Check reachability and webserver load. |
-| **Group shows "No active members yet"** | Normal until each member host completes its first refresh. |
+| **Group sensors read unknown at startup** | Normal until every member host has loaded. The group reports nothing rather than a total that is missing a member, since a counter that falls restarts the long term statistics. |
 | **Counters missing from Recorder** | Counters use `TOTAL_INCREASING` with `count` unit, ensuring long-term statistics work correctly. |
 | **Reconfigure connection** | Use the "Reconfigure" button on the integration card to change host, port, API key, or SSL settings. |
 | **REST prerequisites** | Ensure the dnsdist webserver is enabled, has an API key, and allows your HA network in the ACL. |
