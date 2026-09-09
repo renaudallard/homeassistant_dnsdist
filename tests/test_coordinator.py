@@ -287,6 +287,26 @@ class TestNormalize:
         assert result[ATTR_QUERIES] == 0
         assert result[ATTR_RESPONSES] == 0
 
+    def test_one_unreadable_statistic_does_not_lose_the_rest(self):
+        stats = self._stats(
+            ("queries", 1000),
+            ("acl-drops", None),
+            ("cache-hits", 80),
+            ("cache-misses", 20),
+            ("cpu-user-msec", 900),
+        )
+        result = self.coord._normalize(stats)
+        assert result[ATTR_QUERIES] == 1000
+        assert result[ATTR_CACHE_HITS] == 80
+        assert result["cpu_user_msec"] == 900
+        assert result[ATTR_DROPS] == 0
+
+    def test_an_unreadable_value_counts_as_zero(self):
+        stats = self._stats(("acl-drops", "wat"), ("rule-drop", 5))
+        result = self.coord._normalize(stats)
+        assert result[ATTR_DROPS] == 5
+        assert result[ATTR_RULE_DROP] == 5
+
     def test_string_values_are_coerced(self):
         stats = self._stats(("queries", "500"), ("responses", "450"))
         result = self.coord._normalize(stats)

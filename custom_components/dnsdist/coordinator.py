@@ -267,37 +267,39 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         """Normalize dnsdist JSON stats into HA-friendly keys."""
         normalized: dict[str, Any] = self._zero_data()
 
+        # Every value goes through coerce_int, so one statistic dnsdist could not
+        # render leaves a zero of its own rather than aborting the whole read
+        # and taking every statistic after it down with it.
         try:
             drops = 0
             items = stats if isinstance(stats, list) else stats.get("statistics", [])
             for item in items:
                 key = item.get("name")
-                val = item.get("value")
+                val = coerce_int(item.get("value"))
 
                 if key in DROP_STATS:
-                    drops += int(val)
+                    drops += val
 
                 if key == "queries":
-                    normalized[ATTR_QUERIES] = int(val)
+                    normalized[ATTR_QUERIES] = val
                 elif key == "responses":
-                    normalized[ATTR_RESPONSES] = int(val)
+                    normalized[ATTR_RESPONSES] = val
                 elif key in ("rule-drop", "rule_drop"):
-                    normalized[ATTR_RULE_DROP] = int(val)
+                    normalized[ATTR_RULE_DROP] = val
                 elif key in ("downstream-send-errors", "downstream_errors"):
-                    normalized[ATTR_DOWNSTREAM_ERRORS] = int(val)
+                    normalized[ATTR_DOWNSTREAM_ERRORS] = val
                 elif key in ("cache-hits", "cache_hits"):
-                    normalized[ATTR_CACHE_HITS] = int(val)
+                    normalized[ATTR_CACHE_HITS] = val
                 elif key in ("cache-misses", "cache_misses"):
-                    normalized[ATTR_CACHE_MISSES] = int(val)
+                    normalized[ATTR_CACHE_MISSES] = val
                 elif key in ("uptime",):
-                    normalized[ATTR_UPTIME] = int(val)
+                    normalized[ATTR_UPTIME] = val
                 elif key in ("cpu-user-msec", "cpu_user_msec"):
-                    normalized["cpu_user_msec"] = int(val)
+                    normalized["cpu_user_msec"] = val
                 elif key in ("cpu-sys-msec", "cpu_sys_msec"):
-                    normalized["cpu_sys_msec"] = int(val)
+                    normalized["cpu_sys_msec"] = val
                 elif key in ("security-status", "security_status"):
-                    sec = int(val)
-                    normalized[ATTR_SECURITY_STATUS] = SECURITY_STATUS_MAP.get(sec, "unknown")
+                    normalized[ATTR_SECURITY_STATUS] = SECURITY_STATUS_MAP.get(val, "unknown")
 
             normalized[ATTR_DROPS] = drops
 
