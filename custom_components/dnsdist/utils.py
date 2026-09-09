@@ -551,8 +551,19 @@ class HistoryMixin:
         while self._history and self._history[0][0] < cutoff_24h:
             self._history.popleft()
 
+    def _scale_to_window(self, history_span: float, query_count: int, window: int) -> int:
+        """Scale everything the history holds up to a full window."""
+        observed = query_count - self._history[0][1]
+        return max(0, int((observed / history_span) * window))
+
     def _compute_rates(self, now_ts: float, query_count: int) -> tuple[int, int]:
-        """Compute hourly and daily request rates with extrapolation.
+        """Compute hourly and daily request totals.
+
+        An hour fits inside the retained history, so once there is an hour of it
+        the hourly figure is the real count over the trailing hour. The history
+        is trimmed at 24 hours and can never reach past that, so the daily
+        figure is always scaled from what is there, which comes within a
+        rounding error of the measured count once a day has gone by.
 
         Returns:
             Tuple of (req_per_hour, req_per_day).
@@ -560,25 +571,13 @@ class HistoryMixin:
         if not self._history:
             return 0, 0
 
-        oldest_ts = self._history[0][0]
-        history_span = now_ts - oldest_ts
+        history_span = now_ts - self._history[0][0]
+        if history_span <= 0:
+            return 0, 0
 
-        # Hourly rate
         if history_span >= 3600:
             req_per_hour = compute_window_total(self._history, now_ts, 3600, query_count)
-        elif history_span > 0:
-            observed = query_count - self._history[0][1]
-            req_per_hour = int((observed / history_span) * 3600)
         else:
-            req_per_hour = 0
+            req_per_hour = self._scale_to_window(history_span, query_count, 3600)
 
-        # Daily rate
-        if history_span >= 86400:
-            req_per_day = compute_window_total(self._history, now_ts, 86400, query_count)
-        elif history_span > 0:
-            observed = query_count - self._history[0][1]
-            req_per_day = int((observed / history_span) * 86400)
-        else:
-            req_per_day = 0
-
-        return req_per_hour, req_per_day
+        return req_per_hour, self._scale_to_window(history_span, query_count, 86400)

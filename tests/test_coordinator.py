@@ -135,6 +135,36 @@ class TestZeroData:
         assert coord._history.maxlen == (86400 // 600) + 1
 
 
+class TestComputeRates:
+    def rates(self, samples, now_ts, query_count):
+        coord = make_coordinator()
+        coord._history.extend(samples)
+        return coord._compute_rates(now_ts, query_count)
+
+    def test_no_history_is_no_rate(self):
+        assert make_coordinator()._compute_rates(1000.0, 50) == (0, 0)
+
+    def test_a_single_sample_is_no_rate(self):
+        assert self.rates([(1000.0, 50)], 1000.0, 50) == (0, 0)
+
+    def test_short_history_is_scaled_up_to_the_window(self):
+        # 100 queries in the last minute
+        assert self.rates([(940.0, 0)], 1000.0, 100) == (6000, 144000)
+
+    def test_an_hour_of_history_is_measured_not_scaled(self):
+        hour_ago = 1000.0 - 3600
+        req_per_hour, _ = self.rates([(hour_ago, 0), (1000.0, 720)], 1000.0, 720)
+        assert req_per_hour == 720
+
+    def test_a_day_of_history_lands_on_the_measured_count(self):
+        day_ago = 1000.0 - 86400
+        _, req_per_day = self.rates([(day_ago, 0), (1000.0, 5000)], 1000.0, 5000)
+        assert req_per_day == 5000
+
+    def test_a_counter_that_went_backwards_never_goes_negative(self):
+        assert self.rates([(940.0, 500)], 1000.0, 100) == (0, 0)
+
+
 # ---------------------------------------------------------------------------
 # _normalize
 # ---------------------------------------------------------------------------

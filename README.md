@@ -145,7 +145,9 @@ Additional dynamic entities (created per backend / per rule):
 | `Filter <rule name>` | sensor | Per-rule match count with idle/active icons |
 | `Dynblock <network>` | sensor | Block count with reason, action, time remaining |
 
-> Rate sensors are extrapolated from available history until enough data is collected (1h / 24h), then switch to actual measured values.
+> Request rates start out scaled up from whatever history exists. Once an hour of history has built up,
+> the hourly figure becomes a real count over the trailing hour. The daily figure stays scaled from the
+> retained 24 hours, which comes within a rounding error of the measured count once a day has gone by.
 
 There is no backend enable/disable switch. dnsdist serves its HTTP API from an
 exact-path handler table and only accepts a write on the cache and the ACL, so
