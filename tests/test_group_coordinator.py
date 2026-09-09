@@ -26,7 +26,7 @@
 """Tests for DnsdistGroupCoordinator aggregation logic."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from custom_components.dnsdist.group_coordinator import DnsdistGroupCoordinator
 from custom_components.dnsdist.const import (
@@ -40,6 +40,8 @@ from custom_components.dnsdist.const import (
     ATTR_FILTERING_RULES,
     ATTR_MEMBERS,
     ATTR_QUERIES,
+    ATTR_REQ_PER_DAY,
+    ATTR_REQ_PER_HOUR,
     ATTR_RESPONSES,
     ATTR_RULE_DROP,
     ATTR_SECURITY_STATUS,
@@ -111,13 +113,9 @@ def base_data(**overrides):
 
 
 def run_aggregation(coord, hass, members_map):
-    """Set hass.data and run _async_update_data, patching HA storage calls."""
+    """Set hass.data and run one aggregation."""
     hass.data[DOMAIN] = members_map
-    with (
-        patch.object(coord, "_async_ensure_history_loaded", new_callable=AsyncMock),
-        patch.object(coord, "_async_save_history"),
-    ):
-        return asyncio.run(coord._async_update_data())
+    return asyncio.run(coord._async_update_data())
 
 
 class TestReloadSignal:
@@ -205,9 +203,36 @@ class TestGroupAggregationCounters:
         assert result[ATTR_CACHE_HITS] == 120
         assert result[ATTR_CACHE_MISSES] == 30
 
-    def test_deque_maxlen_at_30s_interval(self):
-        coord, _ = make_group_coordinator()
-        assert coord._history.maxlen == (86400 // 30) + 1
+
+class TestGroupRates:
+    """The group has no history of its own, it adds up what its members report."""
+
+    def rates(self, members):
+        coord, hass = make_group_coordinator(members=[n for n, _, _ in members])
+        coords = {
+            f"e{i}": make_member(n, base_data(**{ATTR_REQ_PER_HOUR: h, ATTR_REQ_PER_DAY: d}))
+            for i, (n, h, d) in enumerate(members)
+        }
+        result = run_aggregation(coord, hass, coords)
+        return result[ATTR_REQ_PER_HOUR], result[ATTR_REQ_PER_DAY]
+
+    def test_sums_the_member_rates(self):
+        assert self.rates([("h1", 100, 2400), ("h2", 50, 1200)]) == (150, 3600)
+
+    def test_a_member_that_has_no_history_yet_adds_nothing(self):
+        assert self.rates([("h1", 100, 2400), ("h2", 0, 0)]) == (100, 2400)
+
+    def test_a_member_that_dropped_out_is_simply_not_counted(self):
+        """No shared counter, so nothing to mistake a smaller group for."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        both = {
+            "e1": make_member("h1", base_data(**{ATTR_REQ_PER_HOUR: 100, ATTR_REQ_PER_DAY: 2400})),
+            "e2": make_member("h2", base_data(**{ATTR_REQ_PER_HOUR: 50, ATTR_REQ_PER_DAY: 1200})),
+        }
+        assert run_aggregation(coord, hass, both)[ATTR_REQ_PER_HOUR] == 150
+        result = run_aggregation(coord, hass, {"e1": both["e1"]})
+        assert result[ATTR_REQ_PER_HOUR] == 100
+        assert result[ATTR_REQ_PER_DAY] == 2400
 
 
 class TestGroupAggregationCPU:

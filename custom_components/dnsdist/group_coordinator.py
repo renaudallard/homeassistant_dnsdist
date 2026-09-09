@@ -28,12 +28,9 @@
 from __future__ import annotations
 
 import logging
-import time
-from collections import deque
 from datetime import timedelta
-from typing import Any, Deque, Tuple
+from typing import Any
 
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -58,15 +55,13 @@ from .const import (
     CONF_NAME,
     DOMAIN,
     SIGNAL_DNSDIST_RELOAD,
-    STORAGE_KEY_HISTORY,
-    STORAGE_VERSION,
 )
-from .utils import HistoryMixin, coerce_int, is_group_entry, make_zero_data, slugify_rule
+from .utils import coerce_int, is_group_entry, make_zero_data, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
+class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Aggregate multiple dnsdist server coordinators into one logical group."""
 
     def __init__(
@@ -89,16 +84,6 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
         self._entry_id = entry_id
         self._members = members or []
         self._last_data: dict[str, Any] = self._zero_data()
-        # Capped at 24 hours worth of samples to bound memory usage.
-        self._history: Deque[Tuple[float, int]] = deque(maxlen=(86400 // update_interval) + 1)
-        self._history_store = Store(
-            hass,
-            STORAGE_VERSION,
-            f"{DOMAIN}_{entry_id}_{STORAGE_KEY_HISTORY}",
-        )
-        self._history_loaded = False
-        self._history_dirty = False
-        self._last_history_persist: float | None = None
         self._unsub_dispatcher = async_dispatcher_connect(hass, SIGNAL_DNSDIST_RELOAD, self._handle_reload_signal)
         _LOGGER.info("Initialized dnsdist group '%s' with members: %s", name, ", ".join(self._members))
 
@@ -117,7 +102,6 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Aggregate metrics from active member coordinators."""
-        await self._async_ensure_history_loaded()
         try:
             all_coords = self.hass.data.get(DOMAIN, {})
             member_states = self._member_states(all_coords)
@@ -145,6 +129,13 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                 ATTR_DOWNSTREAM_ERRORS: 0,
                 ATTR_CACHE_HITS: 0,
                 ATTR_CACHE_MISSES: 0,
+                # Each member works out its own rates over its own history, so
+                # the group has none of its own to keep. Summing what they
+                # report survives a member restarting, leaving or coming back,
+                # none of which a counter summed across the group can tell from
+                # traffic.
+                ATTR_REQ_PER_HOUR: 0,
+                ATTR_REQ_PER_DAY: 0,
             }
             cpu_values: list[float] = []
             uptime_values: list[int] = []
@@ -277,19 +268,6 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
                 aggregated_dynamic,
                 quorum and dynamic_reporters >= self._count_reporters(active_members, "_dynamic_rules_supported"),
             )
-
-            # --- Rolling-window request totals for the group ---
-            try:
-                now_ts = time.time()
-                q_total = int(aggregated[ATTR_QUERIES])
-                self._update_history(now_ts, q_total)
-                req_hour, req_day = self._compute_rates(now_ts, q_total)
-                aggregated[ATTR_REQ_PER_HOUR] = req_hour
-                aggregated[ATTR_REQ_PER_DAY] = req_day
-            except Exception as err:
-                _LOGGER.debug("[%s] Group rate computation failed: %s", self._name, err)
-
-            self._async_save_history()
 
             self._last_data = aggregated
             _LOGGER.debug("[%s] Aggregated stats: %s", self._name, aggregated)
