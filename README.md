@@ -4,7 +4,7 @@
 
 # PowerDNS **dnsdist** — Home Assistant Integration
 
-[![Release](https://img.shields.io/badge/version-1.5.3-blue.svg)](#changelog)
+[![Release](https://img.shields.io/badge/version-1.5.4-blue.svg)](#changelog)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.10%2B-41BDF5)](https://www.home-assistant.io/)
 [![dnsdist](https://img.shields.io/badge/dnsdist-2.x-ff6f00)](https://dnsdist.org)
 [![Validate HACS](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/renaudallard/homeassistant_dnsdist/actions/workflows/hacs-validation.yml)
@@ -24,7 +24,7 @@ Monitor every proxy, surface aggregated insights, and clear caches over the REST
 |---|---|
 | **Integration type** | Hub (per-host and per-group devices) |
 | **Domain** | `dnsdist` |
-| **Current version** | **1.5.3** |
+| **Current version** | **1.5.4** |
 | **Home Assistant** | **2025.10+** |
 | **dnsdist** | **2.x** |
 | **License** | [BSD 2-Clause](LICENSE) |
@@ -188,7 +188,7 @@ The integration includes a custom Lovelace card that is automatically registered
 
 ### Manual resource registration
 
-If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.3` as a JavaScript Module.
+If needed, go to **Settings > Dashboards > Resources** and add `/dnsdist_static/dnsdist-card.js?v=1.5.4` as a JavaScript Module.
 
 ### Usage
 
@@ -288,6 +288,10 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.5.4
+- Put a floor under how long a group holds its last reading. 1.5.3 taught it to wait for a member that has no coordinator loaded, on the assumption that absence is always brief, which the group cannot enforce. A member that never came back froze the group on its last figures for good, and those figures went on looking live. It now holds for three polls, then reports on the members that are actually there and says once in the log which one it gave up on. A group left with no members at all reports nothing rather than a stale total, which it had been doing since long before 1.5.3
+- Clamp the polling interval to the ten to six hundred seconds the flows have always offered. Setup took whatever the entry held and handed it straight to the history deque, where a stored zero divides by zero. That raises before the coordinator is registered, so the entry never loads at all, and with the change above it was also what could leave a group waiting on a member for ever. Only an entry edited by hand could hold such a value, but nothing was stopping it
 
 ### 1.5.3
 
