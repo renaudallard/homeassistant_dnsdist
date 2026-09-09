@@ -60,6 +60,7 @@ from .const import (
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
     DOMAIN,
+    DROP_STATS,
     SECURITY_STATUS_MAP,
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
@@ -250,17 +251,19 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         normalized: dict[str, Any] = self._zero_data()
 
         try:
+            drops = 0
             items = stats if isinstance(stats, list) else stats.get("statistics", [])
             for item in items:
                 key = item.get("name")
                 val = item.get("value")
 
+                if key in DROP_STATS:
+                    drops += int(val)
+
                 if key == "queries":
                     normalized[ATTR_QUERIES] = int(val)
                 elif key == "responses":
                     normalized[ATTR_RESPONSES] = int(val)
-                elif key == "drops":
-                    normalized[ATTR_DROPS] = int(val)
                 elif key in ("rule-drop", "rule_drop"):
                     normalized[ATTR_RULE_DROP] = int(val)
                 elif key in ("downstream-send-errors", "downstream_errors"):
@@ -276,6 +279,8 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                 elif key in ("security-status", "security_status"):
                     sec = int(val)
                     normalized[ATTR_SECURITY_STATUS] = SECURITY_STATUS_MAP.get(sec, "unknown")
+
+            normalized[ATTR_DROPS] = drops
 
             # Compute cache hit %
             hits = normalized[ATTR_CACHE_HITS]

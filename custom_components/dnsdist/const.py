@@ -66,6 +66,17 @@ ATTR_SECURITY_STATUS = "security_status"
 ATTR_REQ_PER_HOUR = "req_per_hour"
 ATTR_REQ_PER_DAY = "req_per_day"
 
+# dnsdist keeps no single "drops" counter, so the dropped queries sensor sums
+# every counter it does keep for a query that never got an answer. rule-drop is
+# part of that sum and also keeps its own sensor as the per-rule breakdown.
+DROP_STATS = (
+    "acl-drops",
+    "rule-drop",
+    "dyn-blocked",
+    "no-policy",
+    "noncompliant-queries",
+)
+
 # Attribute names for complex data structures
 ATTR_FILTERING_RULES = "filtering_rules"
 ATTR_DYNAMIC_RULES = "dynamic_rules"

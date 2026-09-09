@@ -118,8 +118,9 @@ class TestNormalize:
         stats = self._stats(
             ("queries", 1000),
             ("responses", 900),
-            ("drops", 10),
+            ("acl-drops", 4),
             ("rule-drop", 5),
+            ("dyn-blocked", 1),
             ("downstream-send-errors", 3),
             ("cache-hits", 400),
             ("cache-misses", 100),
@@ -138,6 +139,26 @@ class TestNormalize:
         assert result[ATTR_UPTIME] == 3600
         assert result["cpu_user_msec"] == 50000
         assert result[ATTR_SECURITY_STATUS] == "ok"
+
+    def test_drops_sums_every_drop_counter(self):
+        stats = self._stats(
+            ("acl-drops", 1),
+            ("rule-drop", 2),
+            ("dyn-blocked", 4),
+            ("no-policy", 8),
+            ("noncompliant-queries", 16),
+        )
+        result = self.coord._normalize(stats)
+        assert result[ATTR_DROPS] == 31
+        assert result[ATTR_RULE_DROP] == 2
+
+    def test_drops_zero_without_drop_counters(self):
+        result = self.coord._normalize(self._stats(("queries", 10)))
+        assert result[ATTR_DROPS] == 0
+
+    def test_drops_ignores_the_stat_dnsdist_does_not_have(self):
+        result = self.coord._normalize(self._stats(("drops", 99)))
+        assert result[ATTR_DROPS] == 0
 
     def test_dict_format_with_statistics_key(self):
         stats = {"statistics": [{"name": "queries", "value": 42}]}

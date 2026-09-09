@@ -128,6 +128,10 @@ Each host or group creates a Home Assistant device with these sensors:
 | `req_per_hour`, `req_per_day` | count | `MEASUREMENT` |
 | `security_status` | string | - |
 
+dnsdist keeps no single drop counter, so `drops` is the sum of `acl-drops`,
+`rule-drop`, `dyn-blocked`, `no-policy` and `noncompliant-queries`. `rule_drop`
+is part of that sum and keeps its own sensor as the per-rule breakdown.
+
 Additional dynamic entities (created per backend / per rule):
 
 | Entity | Type | Description |
