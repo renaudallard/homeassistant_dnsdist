@@ -14,7 +14,7 @@
 [![BSD 2-Clause](https://img.shields.io/badge/license-BSD--2--Clause-green.svg)](LICENSE)
 
 A secure, high-performance bridge between **PowerDNS dnsdist 2.x** and **Home Assistant 2025.10+**.
-Monitor every proxy, surface aggregated insights, and control dnsdist safely through REST-only actions.
+Monitor every proxy, surface aggregated insights, and clear caches over the REST API.
 
 <p align="center">
   <img src="images/lovelace-card.png" alt="dnsdist Lovelace card" width="340">
@@ -119,8 +119,9 @@ A host that stops answering keeps publishing its last known figures rather than
 going unavailable, so the group would otherwise aggregate a dead member without
 saying so. Each group therefore carries one `Member <host>` binary sensor per
 member, on for a host that answered its last poll and off for one that did not.
-A member whose entry is unloaded, disabled or deleted reports nothing at all,
-since that is not the same as a host refusing to answer.
+A member reports nothing at all while its entry is unloaded, disabled or
+deleted, or before it has managed its first poll, since none of those is the
+same as a host refusing to answer.
 
 ---
 
@@ -133,7 +134,8 @@ Each host or group creates a Home Assistant device with these sensors:
 | `queries`, `responses`, `drops`, `rule_drop`, `downstream_errors`, `cache_hits`, `cache_misses` | count | `TOTAL_INCREASING` |
 | `cacheHit`, `cpu` | % | `MEASUREMENT` |
 | `uptime` | seconds | `MEASUREMENT` |
-| `req_per_hour`, `req_per_day` | count | `MEASUREMENT` |
+| `req_per_hour` | req/h | `MEASUREMENT` |
+| `req_per_day` | req/d | `MEASUREMENT` |
 | `security_status` | string | - |
 
 `cpu` covers user plus system time and is not capped at 100: dnsdist runs a
@@ -255,7 +257,7 @@ Each host and group device also exposes a **Clear Cache** button. Group presses 
 | **Counters missing from Recorder** | Counters use `TOTAL_INCREASING` with `count` unit, ensuring long-term statistics work correctly. |
 | **Reconfigure connection** | Use the "Reconfigure" button on the integration card to change host, port, API key, or SSL settings. |
 | **REST prerequisites** | Ensure the dnsdist webserver is enabled, has an API key, and allows your HA network in the ACL. |
-| **Unavailable filter or dynblock entities** | They are removed automatically when the entry reloads. Reload the integration to clear them immediately. |
+| **Unavailable filter or dynblock entities** | They are removed within one poll of the object leaving dnsdist, and at startup for anything that went while Home Assistant was stopped. |
 | **A filtering rule sensor changed entity ID** | Its identity moved from the dnsdist UUID to the rule name. Set `name=` on the rule in `dnsdist.conf` to pin it. |
 
 **Diagnostics:** Visit **Settings > Devices & Services > PowerDNS dnsdist > ... > Download diagnostics**. Secrets are automatically redacted.
@@ -295,7 +297,7 @@ Breaking:
 - `drops` was reading a statistic dnsdist has never had and sat at zero on every version. It is now the sum of `acl-drops`, `rule-drop`, `dyn-blocked`, `no-policy` and `noncompliant-queries`, so the sensor steps up from a flat line
 
 Added:
-- A connectivity binary sensor per group member, so a host that stops answering is visible instead of the group aggregating its last known figures in silence. A member whose entry is unloaded, disabled or deleted reports unknown rather than disconnected
+- A connectivity binary sensor per group member, so a host that stops answering is visible instead of the group aggregating its last known figures in silence. A member reports unknown rather than disconnected while its entry is unloaded, disabled or deleted, or before it has managed its first poll
 - Reject a host or group name another entry already uses, since the name keys the device and picks the target of the services
 - A rename now follows through into every group that lists the host, instead of silently dropping it from the aggregate
 
