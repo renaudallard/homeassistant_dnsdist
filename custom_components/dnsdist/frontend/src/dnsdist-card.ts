@@ -227,10 +227,14 @@ export class DnsdistCard extends LitElement {
         (friendlyName.toLowerCase().startsWith(prefixForName) ||
          friendlyName.toLowerCase().startsWith(`${prefixForName} ${prefixForName}`));
 
-      // Method 3: Check if it has filter-specific attributes (action, rule, enabled)
+      // Method 3: filter attributes plus the filter marker, which catches an
+      // entity renamed away from the pattern above. The attributes on their own
+      // are not ours to claim, plenty of entities carry an "action".
       const hasFilterAttrs = entity.attributes?.action !== undefined ||
         (entity.attributes?.rule !== undefined && entity.attributes?.enabled !== undefined);
-      const matchesFilterAttrs = hasFilterAttrs &&
+      const looksLikeFilter = entityId.includes('_filter_') ||
+        friendlyName.toLowerCase().includes(' filter ');
+      const matchesFilterAttrs = hasFilterAttrs && looksLikeFilter &&
         (entityId.toLowerCase().includes(prefix.toLowerCase()) ||
          friendlyName.toLowerCase().includes(prefix.toLowerCase().replace(/_/g, ' ')));
 
@@ -317,10 +321,13 @@ export class DnsdistCard extends LitElement {
         (friendlyName.toLowerCase().startsWith(prefixForName) ||
          friendlyName.toLowerCase().startsWith(`${prefixForName} ${prefixForName}`));
 
-      // Method 3: Check if it has dynblock-specific attributes (network, reason, seconds)
+      // Method 3: dynblock attributes plus the dynblock marker, on the same
+      // terms as the filter list above.
       const hasDynblockAttrs = entity.attributes?.network !== undefined ||
         (entity.attributes?.reason !== undefined && entity.attributes?.seconds !== undefined);
-      const matchesDynblockAttrs = hasDynblockAttrs &&
+      const looksLikeDynblock = entityId.includes('_dynblock_') ||
+        friendlyName.toLowerCase().includes(' dynblock ');
+      const matchesDynblockAttrs = hasDynblockAttrs && looksLikeDynblock &&
         (entityId.toLowerCase().includes(prefix.toLowerCase()) ||
          friendlyName.toLowerCase().includes(prefix.toLowerCase().replace(/_/g, ' ')));
 
