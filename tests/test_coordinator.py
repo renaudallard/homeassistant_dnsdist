@@ -380,6 +380,19 @@ class TestHistoryPersistence:
         assert len(loaded._history) == 2
         assert loaded._last_raw == 1100
 
+    def test_a_store_from_before_the_source_field_still_loads(self):
+        """The shape 1.5.1 wrote: a last counter, but nothing saying whose."""
+        now = time.time()
+        stored = {
+            STORAGE_KEY_HISTORY: [[now - 60, 1000], [now - 30, 1100]],
+            STORAGE_KEY_LAST_RAW: 1100,
+        }
+        loaded = self.load(make_coordinator(), stored)
+        assert len(loaded._history) == 2
+        assert loaded._last_raw == 1100
+        loaded._update_history(now, 1400)
+        assert loaded._history[-1][1] - loaded._history[-2][1] == 300, "the gap is still counted"
+
     def test_samples_older_than_a_day_are_dropped_on_load(self):
         now = time.time()
         stored = {STORAGE_KEY_HISTORY: [[now - 90_000, 1], [now - 60, 2]]}
