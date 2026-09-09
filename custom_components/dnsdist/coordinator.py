@@ -219,7 +219,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             _LOGGER.debug("[%s] Rate computation failed: %s", self._name, err)
 
-        await self._async_save_history()
+        self._async_save_history()
 
         try:
             server_config = await self._async_fetch_server_config(session, headers)

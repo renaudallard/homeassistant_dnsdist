@@ -101,6 +101,11 @@ RETIRED_ENTITY_PREFIXES = ("backend_switch:",)
 STORAGE_VERSION = 1
 STORAGE_KEY_HISTORY = "history"
 
+# Shortest gap between two writes of the rolling request history. Writing the
+# whole 24 hours of samples once per poll wears out the flash on a small board
+# for no gain, and the rates only care about the shape of the last day.
+HISTORY_SAVE_INTERVAL = 300
+
 # Security status mappings (dnsdist API code -> string)
 SECURITY_STATUS_MAP = {
     0: "unknown",

@@ -64,6 +64,7 @@ from .const import (
     ATTR_UPTIME,
     DOMAIN,
     DYNAMIC_ENTITY_PREFIXES,
+    HISTORY_SAVE_INTERVAL,
     RETIRED_ENTITY_PREFIXES,
     STORAGE_KEY_HISTORY,
 )
@@ -474,25 +475,27 @@ class HistoryMixin:
             self._history = deque(history, maxlen=self._history.maxlen)
         self._history_dirty = False
 
-    async def _async_save_history(self) -> None:
-        """Persist the rolling history so restarts keep accurate rates."""
+    def _history_payload(self) -> dict[str, Any]:
+        """Build the payload the store writes when the queued save fires."""
+        return {STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history]}
+
+    @callback
+    def _async_save_history(self) -> None:
+        """Queue the rolling history so restarts keep accurate rates.
+
+        The store does the write off the update path and flushes whatever is
+        still queued when Home Assistant stops.
+        """
         if not self._history_loaded or not self._history_dirty:
             return
 
         if self._last_history_persist is not None:
-            if monotonic() - self._last_history_persist < 30:
+            if monotonic() - self._last_history_persist < HISTORY_SAVE_INTERVAL:
                 return
 
-        payload = {
-            STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history],
-        }
-
-        try:
-            await self._history_store.async_save(payload)
-            self._history_dirty = False
-            self._last_history_persist = monotonic()
-        except Exception as err:
-            _LOGGER.debug("[%s] Failed to save history: %s", self._name, err)
+        self._history_dirty = False
+        self._last_history_persist = monotonic()
+        self._history_store.async_delay_save(self._history_payload)
 
     def _update_history(self, now_ts: float, query_count: int) -> None:
         """Update history with new data point and trim old entries.

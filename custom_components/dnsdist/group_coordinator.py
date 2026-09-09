@@ -279,7 +279,7 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
             except Exception as err:
                 _LOGGER.debug("[%s] Group rate computation failed: %s", self._name, err)
 
-            await self._async_save_history()
+            self._async_save_history()
 
             self._last_data = aggregated
             _LOGGER.debug("[%s] Aggregated stats: %s", self._name, aggregated)

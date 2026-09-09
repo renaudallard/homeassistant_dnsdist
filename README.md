@@ -58,7 +58,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 - **Dynamic rule sensors** for temporary blocks (dynblocks) from rate limiting and DoS protection
 - **Custom Lovelace card** with gauges, counters, filtering rules, and dynamic rules
 - **Long-term statistics ready** sensors (`TOTAL_INCREASING` counters, `MEASUREMENT` percentages)
-- **Rolling request rates** (`req_per_hour`, `req_per_day`) with history persistence across restarts
+- **Rolling request rates** (`req_per_hour`, `req_per_day`) with history persisted across restarts, written at most every 5 minutes and on shutdown
 - **Secure by default** with HTTPS and SSL verification
 - **Diagnostics bundle** with automatic secret redaction
 - **REST-only service**: `clear_cache`

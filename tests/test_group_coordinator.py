@@ -112,7 +112,7 @@ def run_aggregation(coord, hass, members_map):
     hass.data[DOMAIN] = members_map
     with (
         patch.object(coord, "_async_ensure_history_loaded", new_callable=AsyncMock),
-        patch.object(coord, "_async_save_history", new_callable=AsyncMock),
+        patch.object(coord, "_async_save_history"),
     ):
         return asyncio.run(coord._async_update_data())
 
