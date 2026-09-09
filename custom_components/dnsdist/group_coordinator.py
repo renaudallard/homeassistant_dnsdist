@@ -129,11 +129,12 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ATTR_DOWNSTREAM_ERRORS: 0,
                 ATTR_CACHE_HITS: 0,
                 ATTR_CACHE_MISSES: 0,
-                # Each member works out its own rates over its own history, so
-                # the group has none of its own to keep. Summing what they
-                # report survives a member restarting, leaving or coming back,
-                # none of which a counter summed across the group can tell from
-                # traffic.
+            }
+            # Each member works out its own rates over its own history, so the
+            # group has none of its own to keep. Summing what they report
+            # survives a member restarting, leaving or coming back, none of
+            # which a counter summed across the group can tell from traffic.
+            rates = {
                 ATTR_REQ_PER_HOUR: 0,
                 ATTR_REQ_PER_DAY: 0,
             }
@@ -151,6 +152,14 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 d = c.data or {}
                 for k in totals:
                     totals[k] += int(d.get(k, 0) or 0)
+
+                # A host that cannot be reached goes on publishing its last
+                # figures. Its counters can stay, they describe traffic that
+                # really happened, but its rates describe traffic it is no
+                # longer serving, so they have to lapse.
+                if getattr(c, "reachable", None) is not False:
+                    for k in rates:
+                        rates[k] += int(d.get(k, 0) or 0)
 
                 cpu_val = d.get(ATTR_CPU)
                 try:
@@ -240,6 +249,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             aggregated = {
                 **totals,
+                **rates,
                 ATTR_CACHE_HITRATE: round(
                     (totals[ATTR_CACHE_HITS] / (totals[ATTR_CACHE_HITS] + totals[ATTR_CACHE_MISSES])) * 100, 2
                 )

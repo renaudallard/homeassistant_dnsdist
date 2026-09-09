@@ -222,6 +222,30 @@ class TestGroupRates:
     def test_a_member_that_has_no_history_yet_adds_nothing(self):
         assert self.rates([("h1", 100, 2400), ("h2", 0, 0)]) == (100, 2400)
 
+    def test_an_unreachable_member_stops_counting_towards_the_rate(self):
+        """It keeps publishing its last figures, which are no longer traffic."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        alive = make_member("h1", base_data(**{ATTR_REQ_PER_HOUR: 12000, ATTR_REQ_PER_DAY: 288000}))
+        dead = make_member("h2", base_data(**{ATTR_REQ_PER_HOUR: 8000, ATTR_REQ_PER_DAY: 192000}))
+        assert run_aggregation(coord, hass, {"e1": alive, "e2": dead})[ATTR_REQ_PER_HOUR] == 20000
+
+        dead.reachable = False
+        result = run_aggregation(coord, hass, {"e1": alive, "e2": dead})
+        assert result[ATTR_REQ_PER_HOUR] == 12000
+        assert result[ATTR_REQ_PER_DAY] == 288000
+
+    def test_an_unreachable_member_still_counts_towards_the_counters(self):
+        """Those describe traffic that really happened, so they carry forward."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        alive = make_member("h1", base_data(**{ATTR_QUERIES: 100}))
+        dead = make_member("h2", base_data(**{ATTR_QUERIES: 50}), reachable=False)
+        assert run_aggregation(coord, hass, {"e1": alive, "e2": dead})[ATTR_QUERIES] == 150
+
+    def test_a_member_that_has_not_polled_yet_still_counts(self):
+        coord, hass = make_group_coordinator(members=["h1"])
+        pending = make_member("h1", base_data(**{ATTR_REQ_PER_HOUR: 0}), reachable=None)
+        assert run_aggregation(coord, hass, {"e1": pending})[ATTR_REQ_PER_HOUR] == 0
+
     def test_a_member_that_dropped_out_is_simply_not_counted(self):
         """No shared counter, so nothing to mistake a smaller group for."""
         coord, hass = make_group_coordinator(members=["h1", "h2"])

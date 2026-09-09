@@ -113,7 +113,7 @@ Setup requires a valid dnsdist statistics JSON payload before finishing, so wron
 | **Update interval** | Default `30` seconds |
 | **Create filtering and dynamic rule sensors** | Enabled by default |
 
-Group rollups: **sum** (counters and request rates), **avg** (CPU %), **max** (uptime), and priority **security status** (critical > warning > ok > unknown). The group keeps no request history of its own; it adds up the rates its members work out, so a member restarting or dropping out costs only that member's share.
+Group rollups: **sum** (counters and request rates), **avg** (CPU %), **max** (uptime), and priority **security status** (critical > warning > ok > unknown). The group keeps no request history of its own; it adds up the rates its members work out, so a member restarting or dropping out costs only that member's share. A member that stops answering keeps counting towards the counters, which describe traffic that really happened, but drops out of the rates, which describe traffic it is no longer serving.
 
 A host that stops answering keeps publishing its last known figures rather than
 going unavailable, so the group would otherwise aggregate a dead member without
