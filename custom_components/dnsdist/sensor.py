@@ -473,7 +473,7 @@ class DnsdistBackendSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         backend = self._backend_data()
         attrs: dict[str, Any] = {}
-        for key in ("address", "name", "responses", "drops", "latency", "qps", "outstanding"):
+        for key in ("address", "name", "responses", "send_errors", "latency", "qps", "outstanding"):
             if key in backend and backend[key] is not None:
                 attrs[key] = backend[key]
         return attrs

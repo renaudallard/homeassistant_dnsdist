@@ -423,7 +423,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             "state": state,
             "queries": coerce_int(item.get("queries")),
             "responses": coerce_int(item.get("responses")),
-            "drops": coerce_int(item.get("drops")),
+            "send_errors": coerce_int(item.get("sendErrors")),
             "latency": float(item.get("latency", 0) or 0),
             "order": coerce_int(item.get("order")),
             "weight": coerce_int(item.get("weight")),
