@@ -121,6 +121,23 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("[%s] No active members yet", self._name)
                 return {**self._last_data, ATTR_MEMBERS: member_states}
 
+            # Publishing an aggregate that is missing a member would make the
+            # counters fall, and a falling TOTAL_INCREASING sensor is a meter
+            # reset as far as the statistics are concerned, which adds the whole
+            # value again. So hold the last reading while a member the user
+            # still has configured has no coordinator loaded, which only happens
+            # between its entry unloading and loading again. A member that is
+            # loaded but failing is not waited for: that can last, and it would
+            # hold the group for ever. The member states still go out either
+            # way, so the reachability sensors say what is being waited for.
+            expected = set(self._expected_members())
+            waiting = sorted(
+                state["name"] for state in member_states.values() if state["name"] in expected and not state["loaded"]
+            )
+            if waiting:
+                _LOGGER.debug("[%s] Holding the last reading, waiting for %s", self._name, ", ".join(waiting))
+                return {**self._last_data, ATTR_MEMBERS: member_states}
+
             totals = {
                 ATTR_QUERIES: 0,
                 ATTR_RESPONSES: 0,
@@ -261,11 +278,13 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ATTR_MEMBERS: member_states,
             }
 
-            # The aggregate may only shrink once every member is present and
-            # has reported.  A member that is down publishes no rules at all,
-            # and taking that as an empty reading would delete the sensors its
-            # rules feed.
-            quorum = len(active_members) >= len(self._expected_members())
+            # The rule aggregate keeps its own, stricter gate. Every member has
+            # a coordinator loaded by now, but one of them may still have failed
+            # its own poll, and a member that is down publishes no rules at all.
+            # Holding a counter reading for a member that never comes back only
+            # freezes a figure, where letting the rules shrink deletes entities
+            # and the history behind them, so this one waits for all of them.
+            quorum = len(active_members) >= len(expected)
             self._publish_aggregate(
                 aggregated,
                 ATTR_FILTERING_RULES,

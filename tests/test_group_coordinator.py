@@ -204,6 +204,79 @@ class TestGroupAggregationCounters:
         assert result[ATTR_CACHE_MISSES] == 30
 
 
+class TestPartialMembership:
+    """A falling TOTAL_INCREASING counter is a meter reset to the statistics."""
+
+    def setup_group(self):
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        return coord, hass
+
+    def queries(self, coord, hass, present):
+        return run_aggregation(coord, hass, present)[ATTR_QUERIES]
+
+    def both(self, q):
+        return {
+            "e1": make_member("h1", base_data(**{ATTR_QUERIES: q})),
+            "e2": make_member("h2", base_data(**{ATTR_QUERIES: q})),
+        }
+
+    def test_a_loaded_but_failing_member_is_not_waited_for(self):
+        """That state can last, so holding for it would freeze the group."""
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1000)) == 2000
+        mixed = {
+            "e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200})),
+            "e2": make_member("h2", base_data(**{ATTR_QUERIES: 1200}), success=False),
+        }
+        assert self.queries(coord, hass, mixed) == 1200
+
+    def test_a_missing_member_holds_the_last_reading(self):
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1000)) == 2000
+        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
+        assert self.queries(coord, hass, only_one) == 2000, "held, not halved"
+
+    def test_the_reading_resumes_once_every_member_is_back(self):
+        coord, hass = self.setup_group()
+        self.queries(coord, hass, self.both(1000))
+        self.queries(coord, hass, {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))})
+        assert self.queries(coord, hass, self.both(1400)) == 2800
+
+    def test_the_counters_never_fall(self):
+        coord, hass = self.setup_group()
+        seen = [
+            self.queries(coord, hass, self.both(1000)),
+            self.queries(coord, hass, self.both(1100)),
+            self.queries(coord, hass, {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}),
+            self.queries(coord, hass, self.both(1300)),
+        ]
+        assert seen == sorted(seen), seen
+
+    def test_member_states_still_go_out_while_holding(self):
+        """The reachability sensors have to say what is being waited for."""
+        coord, hass = self.setup_group()
+        run_aggregation(coord, hass, self.both(1000))
+        held = run_aggregation(coord, hass, {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))})
+        assert held[ATTR_MEMBERS]["h2"]["loaded"] is False
+
+    def test_a_member_whose_entry_is_gone_does_not_hold_it_for_ever(self):
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1000)) == 2000
+        hass.config_entries.async_entries.return_value = [make_host_entry("h1")]
+        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
+        assert self.queries(coord, hass, only_one) == 1200, "membership really changed"
+
+    def test_a_disabled_member_does_not_hold_it_either(self):
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1000)) == 2000
+        hass.config_entries.async_entries.return_value = [
+            make_host_entry("h1"),
+            make_host_entry("h2", disabled=True),
+        ]
+        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
+        assert self.queries(coord, hass, only_one) == 1200
+
+
 class TestGroupRates:
     """The group has no history of its own, it adds up what its members report."""
 
@@ -246,7 +319,7 @@ class TestGroupRates:
         pending = make_member("h1", base_data(**{ATTR_REQ_PER_HOUR: 0}), reachable=None)
         assert run_aggregation(coord, hass, {"e1": pending})[ATTR_REQ_PER_HOUR] == 0
 
-    def test_a_member_that_dropped_out_is_simply_not_counted(self):
+    def test_a_member_whose_entry_is_gone_stops_counting(self):
         """No shared counter, so nothing to mistake a smaller group for."""
         coord, hass = make_group_coordinator(members=["h1", "h2"])
         both = {
@@ -254,6 +327,8 @@ class TestGroupRates:
             "e2": make_member("h2", base_data(**{ATTR_REQ_PER_HOUR: 50, ATTR_REQ_PER_DAY: 1200})),
         }
         assert run_aggregation(coord, hass, both)[ATTR_REQ_PER_HOUR] == 150
+
+        hass.config_entries.async_entries.return_value = [make_host_entry("h1")]
         result = run_aggregation(coord, hass, {"e1": both["e1"]})
         assert result[ATTR_REQ_PER_HOUR] == 100
         assert result[ATTR_REQ_PER_DAY] == 2400
