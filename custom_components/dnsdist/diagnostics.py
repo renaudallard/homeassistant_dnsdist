@@ -64,26 +64,3 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         diagnostics["error"] = str(err)
 
     return diagnostics
-
-
-async def async_get_system_diagnostics(hass: HomeAssistant) -> dict[str, Any]:
-    """Return overall dnsdist diagnostics for all entries."""
-    all_entries = hass.data.get(DOMAIN, {})
-    if not all_entries:
-        return {"dnsdist": "No active coordinators"}
-
-    system_info: dict[str, Any] = {}
-    for entry_id, coordinator in all_entries.items():
-        if not hasattr(coordinator, "data"):
-            continue
-        try:
-            name = getattr(coordinator, "_name", entry_id)
-            data = coordinator.data or {}
-            system_info[name] = {
-                "data": data,
-                "last_update_success": coordinator.last_update_success,
-            }
-        except Exception as err:
-            system_info[entry_id] = {"error": str(err)}
-
-    return {"dnsdist": system_info}
