@@ -125,13 +125,17 @@ def name_is_taken(hass: HomeAssistant, name: str, *, entry_id: str | None = None
     """Say whether another dnsdist entry already answers to this name.
 
     The name keys the device and picks the target of the services, so two
-    entries sharing one would fight over both. Pass the entry being renamed as
-    entry_id so it does not clash with itself.
+    entries sharing one would fight over both. They are compared as slugs,
+    because that is what group membership and the entity IDs are built from:
+    to either of those "DNS1" and "dns 1" are the same name, and a group listing
+    both would silently show only one. Pass the entry being renamed as entry_id
+    so that it does not clash with itself.
     """
+    wanted = slugify_rule(name)
     for entry in hass.config_entries.async_entries(DOMAIN):
         if entry.entry_id == entry_id:
             continue
-        if entry.data.get(CONF_NAME, entry.title) == name:
+        if slugify_rule(entry.data.get(CONF_NAME, entry.title)) == wanted:
             return True
 
     return False

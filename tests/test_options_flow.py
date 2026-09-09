@@ -94,6 +94,19 @@ class TestNameIsTaken:
         entries = [make_entry("dns1", {CONF_NAME: "dns1"})]
         assert self.taken(entries, "dns1") is True
 
+    def test_a_name_differing_only_in_case_is_taken(self):
+        """Group membership and entity IDs both slug the name, so these collide."""
+        entries = [make_entry("DNS1", {CONF_NAME: "DNS1"})]
+        assert self.taken(entries, "dns1") is True
+
+    def test_a_name_differing_only_in_punctuation_is_taken(self):
+        entries = [make_entry("DNS 1", {CONF_NAME: "DNS 1"})]
+        assert self.taken(entries, "dns-1") is True
+
+    def test_a_genuinely_different_name_is_free(self):
+        entries = [make_entry("DNS1", {CONF_NAME: "DNS1"})]
+        assert self.taken(entries, "DNS2") is False
+
     def test_name_used_by_a_group(self):
         entries = [make_entry("all", {CONF_IS_GROUP: True, CONF_NAME: "all"})]
         assert self.taken(entries, "all") is True
