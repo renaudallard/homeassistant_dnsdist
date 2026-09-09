@@ -26,8 +26,11 @@
 """Tests for DnsdistCoordinator normalization logic."""
 
 import asyncio
+import time
 from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
+
+from homeassistant.helpers.json import prepare_save_json
 
 from custom_components.dnsdist.coordinator import DnsdistCoordinator
 from custom_components.dnsdist.utils import compute_window_total
@@ -43,6 +46,8 @@ from custom_components.dnsdist.const import (
     ATTR_RULE_DROP,
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
+    STORAGE_KEY_HISTORY,
+    STORAGE_KEY_LAST_RAW,
 )
 
 
@@ -277,6 +282,91 @@ class TestHistoryAndRates:
         coord = self.feed(make_coordinator(), [(0.0, 0), (100.0, 10)])
         coord._update_history(86400.0 + 200.0, 20)
         assert [ts for ts, _ in coord._history] == [86600.0]
+
+
+class TestHistoryPersistence:
+    """The store round trip, which nothing covered until now."""
+
+    def load(self, coord, stored):
+        """Load a canned store payload through the real loader."""
+        coord._history_loaded = False
+        coord._history_store = MagicMock()
+
+        async def _load():
+            return stored
+
+        coord._history_store.async_load = _load
+        asyncio.run(coord._async_ensure_history_loaded())
+        return coord
+
+    def test_the_payload_holds_the_history_and_the_last_counter(self):
+        coord = make_coordinator()
+        coord._update_history(1000.0, 50)
+        coord._update_history(1030.0, 150)
+        payload = coord._history_payload()
+        assert payload[STORAGE_KEY_HISTORY] == [(1000.0, 0), (1030.0, 100)]
+        assert payload[STORAGE_KEY_LAST_RAW] == 150
+
+    def test_the_payload_is_what_the_store_can_write(self):
+        """A tuple per sample, which the old code hid a failure of at debug level."""
+        coord = make_coordinator()
+        coord._update_history(1000.0, 50)
+        prepare_save_json({"version": 1, "minor_version": 1, "key": "k", "data": coord._history_payload()})
+
+    def test_a_saved_payload_loads_back_unchanged(self):
+        now = time.time()
+        source = make_coordinator()
+        source._update_history(now - 60, 1000)
+        source._update_history(now - 30, 1100)
+        loaded = self.load(make_coordinator(), source._history_payload())
+        assert list(loaded._history) == list(source._history)
+        assert loaded._last_raw == 1100
+
+    def test_traffic_served_while_home_assistant_was_down_is_counted(self):
+        now = time.time()
+        source = make_coordinator()
+        source._update_history(now - 60, 1000)
+        source._update_history(now - 30, 1100)
+        loaded = self.load(make_coordinator(), source._history_payload())
+        loaded._update_history(now, 1400)
+        assert loaded._history[-1][1] - loaded._history[-2][1] == 300
+
+    def test_a_store_written_before_last_raw_existed_still_loads(self):
+        now = time.time()
+        legacy = {STORAGE_KEY_HISTORY: [[now - 60, 500_000], [now - 30, 500_100]]}
+        loaded = self.load(make_coordinator(), legacy)
+        assert len(loaded._history) == 2
+        assert loaded._last_raw is None
+        loaded._update_history(now, 500_200)
+        assert loaded._history[-1][1] - loaded._history[-2][1] == 0, "one interval given up, once"
+        loaded._update_history(now + 30, 500_300)
+        assert loaded._history[-1][1] - loaded._history[-2][1] == 100
+
+    def test_samples_older_than_a_day_are_dropped_on_load(self):
+        now = time.time()
+        stored = {STORAGE_KEY_HISTORY: [[now - 90_000, 1], [now - 60, 2]]}
+        assert len(self.load(make_coordinator(), stored)._history) == 1
+
+    def test_junk_in_the_store_is_skipped(self):
+        now = time.time()
+        stored = {STORAGE_KEY_HISTORY: ["nope", [1], [now - 60, "x"], [now - 30, 5]]}
+        assert list(self.load(make_coordinator(), stored)._history) == [(now - 30, 5)]
+
+    def test_an_unreadable_store_leaves_the_history_empty(self):
+        for stored in (None, [], "nope", {}, {STORAGE_KEY_HISTORY: "nope"}):
+            assert list(self.load(make_coordinator(), stored)._history) == [], stored
+
+    def test_the_store_is_read_once(self):
+        coord = self.load(make_coordinator(), {STORAGE_KEY_HISTORY: [[time.time() - 30, 5]]})
+        calls = []
+
+        async def _load():
+            calls.append(1)
+            return {}
+
+        coord._history_store.async_load = _load
+        asyncio.run(coord._async_ensure_history_loaded())
+        assert calls == []
 
 
 # ---------------------------------------------------------------------------
