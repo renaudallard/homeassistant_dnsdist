@@ -61,7 +61,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 - **Rolling request rates** (`req_per_hour`, `req_per_day`) with history persistence across restarts
 - **Secure by default** with HTTPS and SSL verification
 - **Diagnostics bundle** with automatic secret redaction
-- **REST-only services**: `clear_cache`, `enable_server`, `disable_server`, `get_backends`
+- **REST-only service**: `clear_cache`
 - **Reconfigurable** connection parameters (host, port, API key, SSL) without removing the entry
 
 ---
@@ -218,7 +218,8 @@ To change connection parameters (host, port, API key, SSL), use the **Reconfigur
 
 ## Services
 
-All services live under the `dnsdist` domain.
+`clear_cache` is the only service, because expunging the packet cache is the
+only state change dnsdist accepts over its HTTP API.
 Supplying `host` targets a specific display name; omit it to broadcast to every host (groups excluded).
 
 ### `dnsdist.clear_cache`
@@ -228,23 +229,6 @@ service: dnsdist.clear_cache
 data:
   host: "amandil"  # optional
   pool: ""         # optional
-```
-
-### `dnsdist.enable_server` / `dnsdist.disable_server`
-
-```yaml
-service: dnsdist.enable_server
-data:
-  host: "amandil"
-  backend: "192.168.1.10:53"
-```
-
-### `dnsdist.get_backends`
-
-```yaml
-service: dnsdist.get_backends
-data:
-  host: "amandil"  # optional
 ```
 
 Each host and group device also exposes a **Clear Cache** button. Group presses cascade to all members.

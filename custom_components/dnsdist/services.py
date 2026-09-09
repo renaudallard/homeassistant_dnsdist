@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from asyncio import timeout
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode
 
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -45,7 +45,6 @@ async def _call_dnsdist_api(
     endpoint: str,
     *,
     params: dict | None = None,
-    json_data: dict | None = None,
 ) -> tuple[int, str]:
     """Generic caller against the dnsdist HTTP API for a single coordinator."""
     base = getattr(coordinator, "_base_url", None)
@@ -67,7 +66,7 @@ async def _call_dnsdist_api(
         verify_ssl = getattr(coordinator, "_verify_ssl", True)
         ssl_context = False if not verify_ssl else None
         async with timeout(10):
-            async with session.request(method, url, headers=headers, ssl=ssl_context, json=json_data) as resp:
+            async with session.request(method, url, headers=headers, ssl=ssl_context) as resp:
                 text = await resp.text()
                 if resp.status in (200, 204):
                     _LOGGER.info("[%s] %s %s OK", getattr(coordinator, "_name", "?"), method, endpoint)
@@ -137,75 +136,7 @@ async def register_dnsdist_services(hass: HomeAssistant):
                     status,
                 )
 
-    # ------------------------------------------------------------
-    # enable_server (REST): PUT /api/v1/servers/{backend}/enable
-    # ------------------------------------------------------------
-    async def handle_enable_server(call: ServiceCall):
-        target = call.data.get("host")
-        backend = call.data.get("backend")
-        if not target:
-            _LOGGER.warning("enable_server requires a 'host'")
-            return
-
-        encoded_backend = _encode_backend_segment(backend)
-        if not encoded_backend:
-            _LOGGER.warning("enable_server received an invalid backend identifier")
-            return
-        for coord in await _targets(target):
-            await _call_dnsdist_api(coord, "PUT", f"/api/v1/servers/{encoded_backend}/enable")
-
-    # ------------------------------------------------------------
-    # disable_server (REST): PUT /api/v1/servers/{backend}/disable
-    # ------------------------------------------------------------
-    async def handle_disable_server(call: ServiceCall):
-        target = call.data.get("host")
-        backend = call.data.get("backend")
-        if not target:
-            _LOGGER.warning("disable_server requires a 'host'")
-            return
-
-        encoded_backend = _encode_backend_segment(backend)
-        if not encoded_backend:
-            _LOGGER.warning("disable_server received an invalid backend identifier")
-            return
-        for coord in await _targets(target):
-            await _call_dnsdist_api(coord, "PUT", f"/api/v1/servers/{encoded_backend}/disable")
-
-    # ------------------------------------------------------------
-    # get_backends (REST): GET /api/v1/servers
-    # ------------------------------------------------------------
-    async def handle_get_backends(call: ServiceCall):
-        target = call.data.get("host")
-        for coord in await _targets(target):
-            await _call_dnsdist_api(coord, "GET", "/api/v1/servers")
-
     # Register REST-only services
     hass.services.async_register(DOMAIN, "clear_cache", handle_clear_cache)
-    hass.services.async_register(DOMAIN, "enable_server", handle_enable_server)
-    hass.services.async_register(DOMAIN, "disable_server", handle_disable_server)
-    hass.services.async_register(DOMAIN, "get_backends", handle_get_backends)
 
-    _LOGGER.info("Registered dnsdist services: clear_cache, enable_server, disable_server, get_backends.")
-
-
-def _encode_backend_segment(raw_backend: str | None) -> str | None:
-    """Return a safely encoded backend identifier for URL paths."""
-
-    if raw_backend is None:
-        return None
-
-    if not isinstance(raw_backend, str):
-        _LOGGER.warning("Received non-string backend identifier: %s", raw_backend)
-        return None
-
-    backend = raw_backend.strip()
-    if not backend:
-        return None
-
-    # Reject control characters outright to avoid header injection or log confusion
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in backend):
-        _LOGGER.warning("Backend identifier contains control characters and was rejected")
-        return None
-
-    # Percent-encode the backend to keep it as a single URL segment.
-    return quote(backend, safe="")
+    _LOGGER.info("Registered dnsdist service: clear_cache.")
