@@ -12,7 +12,11 @@ show_error_codes = true
 disable_error_code = ["attr-defined", "assignment", "arg-type", "call-overload", "misc"]
 
 [tool.ruff]
-target-version = "py314"
+# The sources still parse as 3.13. Saying so keeps the formatter from
+# rewriting "except (A, B)" into the 3.14 only form, which buys nothing and
+# reads badly. Only pycodestyle and pyflakes are enabled and neither cares
+# about the difference. Home Assistant is what pins the runtime to 3.14.
+target-version = "py313"
 line-length = 120
 
 [tool.ruff.lint]
