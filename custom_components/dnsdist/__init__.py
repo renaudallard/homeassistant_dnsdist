@@ -54,6 +54,8 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     CONF_MEMBERS,
     DEFAULT_UPDATE_INTERVAL,
+    MAX_UPDATE_INTERVAL,
+    MIN_UPDATE_INTERVAL,
     SERVICE_CLEAR_CACHE,
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
@@ -203,7 +205,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     data: dict[str, Any] = dict(entry.data)
     is_group = is_group_entry(entry)
-    update_interval = int(data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
+    update_interval = _clamp_update_interval(data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
     name = data.get(CONF_NAME) or entry.title
 
     _LOGGER.info(
@@ -319,6 +321,22 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_update_entry(entry, data=data, version=ver)
 
     return True
+
+
+def _clamp_update_interval(value: Any) -> int:
+    """Keep the polling interval inside the range the flows offer.
+
+    A value outside it, from a hand edited entry or one written before the
+    range was enforced, would otherwise divide by zero working out the history
+    deque size. Setup would then raise before the coordinator ever reached
+    hass.data, which leaves any group listing this host waiting on it.
+    """
+    try:
+        interval = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_UPDATE_INTERVAL
+
+    return max(MIN_UPDATE_INTERVAL, min(interval, MAX_UPDATE_INTERVAL))
 
 
 def _redact(d: dict) -> dict:

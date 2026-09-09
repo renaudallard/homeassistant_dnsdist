@@ -51,6 +51,9 @@ from .const import (
     CONF_MEMBERS,
     CONF_IS_GROUP,
     CONF_INCLUDE_FILTER_SENSORS,
+    DEFAULT_UPDATE_INTERVAL,
+    MAX_UPDATE_INTERVAL,
+    MIN_UPDATE_INTERVAL,
 )
 from .utils import is_group_entry, name_is_taken
 
@@ -248,7 +251,9 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_API_KEY, default=""): str,
                 vol.Optional(CONF_USE_HTTPS, default=False): bool,
                 vol.Optional(CONF_VERIFY_SSL, default=True): bool,
-                vol.Optional(CONF_UPDATE_INTERVAL, default=30): vol.All(int, vol.Range(min=10, max=600)),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=DEFAULT_UPDATE_INTERVAL): vol.All(
+                    int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)
+                ),
                 vol.Optional(CONF_INCLUDE_FILTER_SENSORS, default=False): bool,
             }
         )
@@ -285,7 +290,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         api_key = user_input.get(CONF_API_KEY, "") or None
         use_https = user_input.get(CONF_USE_HTTPS, False)
         verify_ssl = user_input.get(CONF_VERIFY_SSL, True)
-        update_interval = user_input.get(CONF_UPDATE_INTERVAL, 30)
+        update_interval = user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         include_filter_sensors = bool(user_input.get(CONF_INCLUDE_FILTER_SENSORS, False))
 
         try:
@@ -335,7 +340,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input and not errors:
             group_name = user_input[CONF_NAME]
             members = user_input.get(CONF_MEMBERS, [])
-            update_interval = user_input.get(CONF_UPDATE_INTERVAL, 30)
+            update_interval = user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
             include_filter_sensors = bool(user_input.get(CONF_INCLUDE_FILTER_SENSORS, True))
 
             if not members:
@@ -360,7 +365,9 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_NAME): str,
                 vol.Required(CONF_MEMBERS, default=[]): cv.multi_select(sorted(available_hosts)),
-                vol.Optional(CONF_UPDATE_INTERVAL, default=30): vol.All(int, vol.Range(min=10, max=600)),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=DEFAULT_UPDATE_INTERVAL): vol.All(
+                    int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)
+                ),
                 vol.Optional(CONF_INCLUDE_FILTER_SENSORS, default=True): bool,
             }
         )

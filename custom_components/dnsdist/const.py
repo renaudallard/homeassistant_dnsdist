@@ -29,8 +29,12 @@ from homeassistant.const import Platform
 
 DOMAIN = "dnsdist"
 
-# Default update interval in seconds
+# Polling interval in seconds: the default, and the range the flows offer.
+# Setup clamps to the same range, because a stored zero divides by zero working
+# out the history deque size and takes the whole entry down with it.
 DEFAULT_UPDATE_INTERVAL = 30
+MIN_UPDATE_INTERVAL = 10
+MAX_UPDATE_INTERVAL = 600
 
 # How many polls a group carries its last reading forward while a member has no
 # coordinator loaded. Members are only ever briefly absent, between an entry

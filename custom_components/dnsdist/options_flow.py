@@ -43,6 +43,9 @@ from .const import (
     CONF_MEMBERS,
     CONF_INCLUDE_FILTER_SENSORS,
     CONF_REMOVE_DISABLED_FILTER_SENSORS,
+    DEFAULT_UPDATE_INTERVAL,
+    MAX_UPDATE_INTERVAL,
+    MIN_UPDATE_INTERVAL,
 )
 from .utils import is_group_entry, name_is_taken
 
@@ -58,7 +61,7 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
         data = self.config_entry.data
         is_group = is_group_entry(self.config_entry)
         name = data.get(CONF_NAME, self.config_entry.title)
-        update_interval = int(data.get(CONF_UPDATE_INTERVAL, 30))
+        update_interval = int(data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
         members = list(data.get(CONF_MEMBERS, []))
         include_filter_sensors = bool(data.get(CONF_INCLUDE_FILTER_SENSORS, bool(is_group)))
 
@@ -129,7 +132,7 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
                         default=members,
                     ): cv.multi_select(sorted(available_hosts)),
                     vol.Optional(CONF_UPDATE_INTERVAL, default=update_interval): vol.All(
-                        int, vol.Range(min=10, max=600)
+                        int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)
                     ),
                     vol.Optional(CONF_INCLUDE_FILTER_SENSORS, default=include_filter_sensors): bool,
                     vol.Optional(
@@ -143,7 +146,7 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
                 {
                     vol.Required(CONF_NAME, default=name): str,
                     vol.Optional(CONF_UPDATE_INTERVAL, default=update_interval): vol.All(
-                        int, vol.Range(min=10, max=600)
+                        int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)
                     ),
                     vol.Optional(CONF_INCLUDE_FILTER_SENSORS, default=include_filter_sensors): bool,
                     vol.Optional(
