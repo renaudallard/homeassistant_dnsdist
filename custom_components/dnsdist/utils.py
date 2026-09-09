@@ -62,6 +62,7 @@ from .const import (
     ATTR_RULE_DROP,
     ATTR_SECURITY_STATUS,
     ATTR_UPTIME,
+    CONF_NAME,
     DOMAIN,
     DYNAMIC_ENTITY_PREFIXES,
     HISTORY_SAVE_INTERVAL,
@@ -106,6 +107,22 @@ def coerce_int(value: Any) -> int:
     except (TypeError, ValueError):
         return 0
     return 0
+
+
+def name_is_taken(hass: HomeAssistant, name: str, *, entry_id: str | None = None) -> bool:
+    """Say whether another dnsdist entry already answers to this name.
+
+    The name keys the device and picks the target of the services, so two
+    entries sharing one would fight over both. Pass the entry being renamed as
+    entry_id so it does not clash with itself.
+    """
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.entry_id == entry_id:
+            continue
+        if entry.data.get(CONF_NAME, entry.title) == name:
+            return True
+
+    return False
 
 
 def device_identifier(name: str, is_group: bool) -> str:

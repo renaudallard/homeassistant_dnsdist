@@ -93,7 +93,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 
 | Field | Description |
 |---|---|
-| **Name** | Display name for Home Assistant |
+| **Name** | Display name for Home Assistant, unique across hosts and groups |
 | **Host / Port** | dnsdist API endpoint (default port `8083`) |
 | **API Key** | Optional |
 | **Use HTTPS / Verify SSL** | Toggle TLS and certificate validation |
@@ -107,7 +107,7 @@ Setup requires a valid dnsdist statistics JSON payload before finishing, so wron
 
 | Field | Description |
 |---|---|
-| **Group name** | Home Assistant device label |
+| **Group name** | Home Assistant device label, unique across hosts and groups |
 | **Members** | Choose from existing host names |
 | **Update interval** | Default `30` seconds |
 | **Create filtering and dynamic rule sensors** | Enabled by default |

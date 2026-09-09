@@ -45,6 +45,7 @@ from .const import (
     CONF_INCLUDE_FILTER_SENSORS,
     CONF_REMOVE_DISABLED_FILTER_SENSORS,
 )
+from .utils import name_is_taken
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,6 +91,9 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
                 new_data[CONF_NAME] = new_name
             else:
                 new_name = name
+
+            if new_name != name and name_is_taken(self.hass, new_name, entry_id=self.config_entry.entry_id):
+                errors[CONF_NAME] = "duplicate"
 
             # Update group-specific members
             if is_group:

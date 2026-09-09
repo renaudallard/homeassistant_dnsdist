@@ -52,6 +52,7 @@ from .const import (
     CONF_IS_GROUP,
     CONF_INCLUDE_FILTER_SENSORS,
 )
+from .utils import name_is_taken
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -261,6 +262,9 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
 
         name = user_input[CONF_NAME]
+        if name_is_taken(self.hass, name):
+            errors[CONF_NAME] = "duplicate"
+            return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
 
         # Validate host format manually (can't use custom validators in schema due to serialization)
         try:
@@ -328,6 +332,9 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not members:
                 errors["base"] = "no_members"
+
+            if name_is_taken(self.hass, group_name):
+                errors[CONF_NAME] = "duplicate"
 
             if not errors:
                 return self.async_create_entry(

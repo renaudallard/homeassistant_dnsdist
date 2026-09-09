@@ -29,12 +29,14 @@ from unittest.mock import MagicMock
 
 from custom_components.dnsdist.const import CONF_IS_GROUP, CONF_MEMBERS, CONF_NAME
 from custom_components.dnsdist.options_flow import _rename_group_members
+from custom_components.dnsdist.utils import name_is_taken
 
 
 def make_entry(title, data):
     entry = MagicMock()
     entry.title = title
     entry.data = data
+    entry.entry_id = f"entry-{title}"
     return entry
 
 
@@ -76,3 +78,30 @@ class TestRenameGroupMembers:
         data = rename([group], "dns1", "resolver")["all"]["data"]
         assert data[CONF_NAME] == "all"
         assert data[CONF_IS_GROUP] is True
+
+
+class TestNameIsTaken:
+    def taken(self, entries, name, entry_id=None):
+        hass = MagicMock()
+        hass.config_entries.async_entries.return_value = entries
+        return name_is_taken(hass, name, entry_id=entry_id)
+
+    def test_free_name(self):
+        entries = [make_entry("dns1", {CONF_NAME: "dns1"})]
+        assert self.taken(entries, "dns2") is False
+
+    def test_name_used_by_another_host(self):
+        entries = [make_entry("dns1", {CONF_NAME: "dns1"})]
+        assert self.taken(entries, "dns1") is True
+
+    def test_name_used_by_a_group(self):
+        entries = [make_entry("all", {CONF_IS_GROUP: True, CONF_NAME: "all"})]
+        assert self.taken(entries, "all") is True
+
+    def test_the_entry_being_renamed_does_not_clash_with_itself(self):
+        entry = make_entry("dns1", {CONF_NAME: "dns1"})
+        entry.entry_id = "e1"
+        assert self.taken([entry], "dns1", entry_id="e1") is False
+
+    def test_entry_title_stands_in_for_a_missing_name(self):
+        assert self.taken([make_entry("dns1", {})], "dns1") is True

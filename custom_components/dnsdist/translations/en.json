@@ -51,7 +51,7 @@
       "unknown": "Unexpected error occurred.",
       "required": "This field is required.",
       "no_members": "You must select at least one member.",
-      "duplicate": "An entry with this name already exists.",
+      "duplicate": "Another dnsdist host or group already uses this name.",
       "no_hosts": "You must add at least one dnsdist host before creating a group.",
       "invalid_host": "Invalid host format. Enter a valid hostname, IPv4, or IPv6 address."
     },
@@ -74,6 +74,10 @@
           "remove_filter_sensors_on_disable": "Delete filtering and dynamic rule sensors when disabling"
         }
       }
+    },
+    "error": {
+      "no_members": "You must select at least one member.",
+      "duplicate": "Another dnsdist host or group already uses this name."
     }
   },
   "entity": {
