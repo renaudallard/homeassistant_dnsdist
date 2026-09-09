@@ -61,7 +61,6 @@ class DnsdistActionButton(CoordinatorEntity, ButtonEntity):
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_requires_action_confirmation = True  # HA 2025.10+
 
     def __init__(self, coordinator, entry_id: str, *, is_group: bool, members: list[str]) -> None:
         super().__init__(coordinator)
