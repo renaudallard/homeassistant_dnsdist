@@ -253,18 +253,26 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
+        def _show_form():
+            """Re-show the form, keeping whatever the user already typed."""
+            return self.async_show_form(
+                step_id="add_hub",
+                data_schema=self.add_suggested_values_to_schema(schema, user_input),
+                errors=errors,
+            )
+
         if not user_input:
-            return self.async_show_form(step_id="add_hub", data_schema=schema)
+            return _show_form()
 
         # Validate required fields are present
         if CONF_NAME not in user_input or CONF_HOST not in user_input:
             _LOGGER.debug("Missing required fields in user_input: %s", user_input.keys())
-            return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
+            return _show_form()
 
         name = user_input[CONF_NAME]
         if name_is_taken(self.hass, name):
             errors[CONF_NAME] = "duplicate"
-            return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
+            return _show_form()
 
         # Validate host format manually (can't use custom validators in schema due to serialization)
         try:
@@ -272,7 +280,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except vol.Invalid as err:
             _LOGGER.debug("Host validation failed: %s", err)
             errors[CONF_HOST] = "invalid_host"
-            return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
+            return _show_form()
         port = user_input.get(CONF_PORT, 8083)
         api_key = user_input.get(CONF_API_KEY, "") or None
         use_https = user_input.get(CONF_USE_HTTPS, False)
@@ -289,7 +297,7 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "cannot_connect"
 
         if errors:
-            return self.async_show_form(step_id="add_hub", data_schema=schema, errors=errors)
+            return _show_form()
 
         # NOTE: We store api_key in data. __init__.py will use secure storage if available,
         # and migration can move plaintext to secrets on supported platforms.
@@ -357,7 +365,11 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
-        return self.async_show_form(step_id="add_group", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="add_group",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
+            errors=errors,
+        )
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
         """Allow the user to reconfigure connection parameters."""
@@ -417,7 +429,11 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
-        return self.async_show_form(step_id="reconfigure", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
+            errors=errors,
+        )
 
     @staticmethod
     def async_get_options_flow(config_entry):

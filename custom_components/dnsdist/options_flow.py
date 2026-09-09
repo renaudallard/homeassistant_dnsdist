@@ -153,7 +153,11 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
                 }
             )
 
-        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
+            errors=errors,
+        )
 
 
 def _rename_group_members(hass, old_name: str, new_name: str) -> None:

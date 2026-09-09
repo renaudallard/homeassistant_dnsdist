@@ -28,7 +28,7 @@
 import pytest
 import voluptuous as vol
 
-from custom_components.dnsdist.config_flow import validate_host
+from custom_components.dnsdist.config_flow import DnsdistConfigFlow, validate_host
 
 
 class TestValidateHost:
@@ -162,3 +162,21 @@ class TestValidateHost:
     def test_partial_ip_like_string(self):
         with pytest.raises(vol.Invalid, match="Invalid IPv4"):
             validate_host("192.168")
+
+
+class TestFormKeepsInput:
+    """A rejected form must come back with what the user typed, not the defaults."""
+
+    def _suggested(self, schema, values):
+        applied = DnsdistConfigFlow().add_suggested_values_to_schema(schema, values)
+        return {str(key): key.description for key in applied.schema}
+
+    def test_typed_values_are_suggested_back(self):
+        schema = vol.Schema({vol.Required("name"): str, vol.Optional("port", default=8083): int})
+        suggested = self._suggested(schema, {"name": "dns1", "port": 9000})
+        assert suggested["name"] == {"suggested_value": "dns1"}
+        assert suggested["port"] == {"suggested_value": 9000}
+
+    def test_first_display_suggests_nothing(self):
+        schema = vol.Schema({vol.Required("name"): str})
+        assert self._suggested(schema, None) == {"name": None}
