@@ -48,11 +48,12 @@ from custom_components.dnsdist.const import (
 )
 
 
-def make_host_entry(name):
+def make_host_entry(name, disabled=False):
     """Build a fake host config entry the group can count as configured."""
     entry = MagicMock()
     entry.data = {CONF_NAME: name}
     entry.title = name
+    entry.disabled_by = "user" if disabled else None
     return entry
 
 
@@ -372,6 +373,22 @@ class TestGroupAggregationExpiry:
         run_aggregation(coord, hass, {"e1": c1, "e2": c2})
 
         hass.config_entries.async_entries.return_value = [make_host_entry("h1")]
+        result = run_aggregation(coord, hass, {"e1": c1})
+        assert list(result[ATTR_FILTERING_RULES]) == ["block-ads"]
+
+    def test_a_disabled_member_does_not_freeze_the_group(self):
+        """A disabled host entry is never going to report, so it cannot hold on."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
+        rules_h2 = {"block-porn": {"name": "Block Porn", "matches": 2}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules_h1}))
+        c2 = make_member("h2", base_data(**{ATTR_FILTERING_RULES: rules_h2}))
+        run_aggregation(coord, hass, {"e1": c1, "e2": c2})
+
+        hass.config_entries.async_entries.return_value = [
+            make_host_entry("h1"),
+            make_host_entry("h2", disabled=True),
+        ]
         result = run_aggregation(coord, hass, {"e1": c1})
         assert list(result[ATTR_FILTERING_RULES]) == ["block-ads"]
 

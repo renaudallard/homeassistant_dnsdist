@@ -293,13 +293,13 @@ class DnsdistGroupCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]
         """Return the members that still have a host entry in Home Assistant.
 
         A member that is configured but has not finished loading must hold the
-        aggregate back, while one whose entry was deleted must not hold it back
-        for ever.
+        aggregate back, while one whose entry was deleted or disabled must not
+        hold it back for ever: a disabled entry is never going to report.
         """
         configured = {
             entry.data.get(CONF_NAME, entry.title)
             for entry in self.hass.config_entries.async_entries(DOMAIN)
-            if not entry.data.get(CONF_IS_GROUP)
+            if not entry.data.get(CONF_IS_GROUP) and not entry.disabled_by
         }
         return [member for member in self._members if member in configured]
 
