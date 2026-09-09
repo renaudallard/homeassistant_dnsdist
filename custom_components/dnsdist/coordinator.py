@@ -206,14 +206,18 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         try:
             cpu_msec = normalized.get("cpu_user_msec", 0) + normalized.get("cpu_sys_msec", 0)
             now_mono = monotonic()
-            if self._last_cpu_msec is not None and self._last_update_ts is not None:
-                delta_cpu = cpu_msec - self._last_cpu_msec
-                delta_time = now_mono - self._last_update_ts
-                if delta_time > 0 and delta_cpu >= 0:
-                    cpu_percent = ((delta_cpu / 1000.0) / delta_time) * 100
-                    normalized[ATTR_CPU] = round(max(0.0, cpu_percent), 2)
-            self._last_cpu_msec = int(cpu_msec)
-            self._last_update_ts = now_mono
+            # A zero total means the counters were not in the reading, because a
+            # dnsdist that is up has always burned some CPU. Taking it at face
+            # value would rebase the delta to zero and spike the poll after it.
+            if cpu_msec > 0:
+                if self._last_cpu_msec is not None and self._last_update_ts is not None:
+                    delta_cpu = cpu_msec - self._last_cpu_msec
+                    delta_time = now_mono - self._last_update_ts
+                    if delta_time > 0 and delta_cpu >= 0:
+                        cpu_percent = ((delta_cpu / 1000.0) / delta_time) * 100
+                        normalized[ATTR_CPU] = round(max(0.0, cpu_percent), 2)
+                self._last_cpu_msec = int(cpu_msec)
+                self._last_update_ts = now_mono
         except Exception as err:
             _LOGGER.debug("[%s] CPU computation failed: %s", self._name, err)
 

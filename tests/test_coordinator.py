@@ -26,6 +26,7 @@
 """Tests for DnsdistCoordinator normalization logic."""
 
 import asyncio
+from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 from custom_components.dnsdist.coordinator import DnsdistCoordinator
@@ -33,6 +34,7 @@ from custom_components.dnsdist.const import (
     ATTR_CACHE_HITS,
     ATTR_CACHE_HITRATE,
     ATTR_CACHE_MISSES,
+    ATTR_CPU,
     ATTR_DOWNSTREAM_ERRORS,
     ATTR_DROPS,
     ATTR_QUERIES,
@@ -83,6 +85,45 @@ class FakeSession:
 
     def get(self, *args, **kwargs):
         return self._response
+
+
+class RoutedSession:
+    """Serves the statistics response and 404s the optional endpoints."""
+
+    def __init__(self, stats_payload):
+        self._stats = stats_payload
+
+    def get(self, url, **kwargs):
+        if url.endswith("/statistics"):
+            return FakeResponse(200, self._stats)
+        return FakeResponse(404, None)
+
+
+def poll(coord, stats_payload, elapsed=None):
+    """Run one full update, storing the result the way the coordinator does.
+
+    ``elapsed`` fakes the wall clock moving on by that many seconds since the
+    last reading, which is what the CPU percentage divides by.
+    """
+    coord._history_loaded = True
+    contexts = [
+        patch(
+            "custom_components.dnsdist.coordinator.async_get_clientsession",
+            return_value=RoutedSession(stats_payload),
+        ),
+        patch.object(coord, "_async_save_history"),
+    ]
+    if elapsed is not None:
+        contexts.append(
+            patch("custom_components.dnsdist.coordinator.monotonic", side_effect=[coord._last_update_ts + elapsed])
+        )
+
+    with ExitStack() as stack:
+        for context in contexts:
+            stack.enter_context(context)
+        coord.data = asyncio.run(coord._async_update_data())
+
+    return coord.data
 
 
 def fetch_dynamic(payload, status=200):
@@ -138,6 +179,45 @@ class TestZeroData:
 class TestReachable:
     def test_unknown_before_the_first_poll(self):
         assert make_coordinator().reachable is None
+
+    def test_true_once_a_poll_lands(self):
+        coord = make_coordinator()
+        poll(coord, [{"name": "queries", "value": 1.0}])
+        assert coord.reachable is True
+
+
+class TestCpuUsage:
+    def stats(self, cpu_user, cpu_sys=0):
+        return [
+            {"name": "queries", "value": 100.0},
+            {"name": "cpu-user-msec", "value": float(cpu_user)},
+            {"name": "cpu-sys-msec", "value": float(cpu_sys)},
+        ]
+
+    def test_the_first_poll_has_no_delta_to_report(self):
+        assert poll(make_coordinator(), self.stats(500_000))[ATTR_CPU] == 0.0
+
+    def test_counts_user_and_system_time(self):
+        coord = make_coordinator()
+        poll(coord, self.stats(500_000, 100_000))
+        # 900ms of user plus 300ms of system, over 30 seconds
+        assert poll(coord, self.stats(500_900, 100_300), elapsed=30)[ATTR_CPU] == 4.0
+
+    def test_a_thread_per_core_may_pass_100(self):
+        coord = make_coordinator()
+        poll(coord, self.stats(1_000))
+        assert poll(coord, self.stats(61_000), elapsed=30)[ATTR_CPU] == 200.0
+
+    def test_a_dnsdist_restart_reports_no_percentage_rather_than_a_negative(self):
+        coord = make_coordinator()
+        poll(coord, self.stats(500_000))
+        assert poll(coord, self.stats(100), elapsed=30)[ATTR_CPU] == 0.0
+
+    def test_a_reading_without_the_counters_does_not_spike_the_next_one(self):
+        coord = make_coordinator()
+        poll(coord, self.stats(500_000))
+        poll(coord, [{"name": "queries", "value": 200.0}], elapsed=30)
+        assert poll(coord, self.stats(500_900), elapsed=30)[ATTR_CPU] == 3.0
 
 
 class TestComputeRates:
