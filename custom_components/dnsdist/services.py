@@ -34,7 +34,7 @@ from urllib.parse import urlencode
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
+from .const import DOMAIN, SERVICE_CLEAR_CACHE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -137,6 +137,6 @@ async def register_dnsdist_services(hass: HomeAssistant):
                 )
 
     # Register REST-only services
-    hass.services.async_register(DOMAIN, "clear_cache", handle_clear_cache)
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR_CACHE, handle_clear_cache)
 
-    _LOGGER.info("Registered dnsdist service: clear_cache.")
+    _LOGGER.info("Registered dnsdist service: %s.", SERVICE_CLEAR_CACHE)

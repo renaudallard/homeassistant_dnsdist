@@ -55,6 +55,7 @@ from .const import (
     CONF_MEMBERS,
     CONF_IS_GROUP,
     DEFAULT_UPDATE_INTERVAL,
+    SERVICE_CLEAR_CACHE,
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
@@ -195,10 +196,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a dnsdist host or group entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    if not hass.data[DOMAIN].get("_services_registered"):
+    # hass.data[DOMAIN] holds nothing but coordinators, so ask the service
+    # registry whether the shared services are already there.
+    if not hass.services.has_service(DOMAIN, SERVICE_CLEAR_CACHE):
         await register_dnsdist_services(hass)
-        hass.data[DOMAIN]["_services_registered"] = True
-        _LOGGER.info("[dnsdist] Registered control services.")
 
     data: dict[str, Any] = dict(entry.data)
     is_group = bool(data.get(CONF_IS_GROUP, False) or data.get(CONF_MEMBERS))

@@ -35,6 +35,9 @@ DEFAULT_UPDATE_INTERVAL = 30
 # Platforms used by this integration
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
 
+# Services registered for the whole integration, not per entry
+SERVICE_CLEAR_CACHE = "clear_cache"
+
 # Dispatcher signal names (safe to import everywhere)
 SIGNAL_DNSDIST_RELOAD = f"{DOMAIN}_reload_groups"
 
