@@ -6,7 +6,6 @@ export interface DnsdistCardConfig {
   type: string;
   entity_prefix: string;
   title?: string;
-  show_graphs?: boolean;
   show_filters?: boolean;
   show_dynamic_rules?: boolean;
   show_actions?: boolean;

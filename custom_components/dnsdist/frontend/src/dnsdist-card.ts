@@ -52,7 +52,6 @@ export class DnsdistCard extends LitElement {
   setConfig(config: DnsdistCardConfig) {
     // Don't throw during initial setup - let the editor handle validation
     this._config = {
-      show_graphs: false,
       show_filters: true,
       show_dynamic_rules: true,
       show_actions: true,
