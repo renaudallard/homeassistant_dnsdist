@@ -64,6 +64,7 @@ from .const import (
     ATTR_UPTIME,
     DOMAIN,
     DYNAMIC_ENTITY_PREFIXES,
+    RETIRED_ENTITY_PREFIXES,
     STORAGE_KEY_HISTORY,
 )
 
@@ -187,6 +188,32 @@ def filtering_rule_aliases(data: dict[str, Any]) -> dict[str, str]:
             aliases.setdefault(legacy, slug)
 
     return aliases
+
+
+@callback
+def async_remove_retired_entities(hass: HomeAssistant, entry_id: str) -> int:
+    """Delete the entities of a platform the integration no longer provides.
+
+    Dropping a platform leaves its registry entries behind, where they show up
+    as unavailable with nothing left to ever clean them up.
+
+    Returns the number of entities removed.
+    """
+    ent_reg = er.async_get(hass)
+    head = f"{entry_id}:"
+    removed = 0
+
+    for entry in er.async_entries_for_config_entry(ent_reg, entry_id):
+        if not entry.unique_id.startswith(head):
+            continue
+        if not entry.unique_id[len(head) :].startswith(RETIRED_ENTITY_PREFIXES):
+            continue
+
+        _LOGGER.debug("[dnsdist] Removing retired entity %s (%s)", entry.entity_id, entry.unique_id)
+        ent_reg.async_remove(entry.entity_id)
+        removed += 1
+
+    return removed
 
 
 @callback

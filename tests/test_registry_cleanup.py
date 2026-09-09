@@ -39,6 +39,7 @@ from custom_components.dnsdist.utils import (
     async_prune_orphaned_devices,
     async_prune_orphaned_entities,
     async_register_slug_platform,
+    async_remove_retired_entities,
     device_identifier,
     filtering_rule_aliases,
     slugify_rule,
@@ -140,7 +141,6 @@ class TestSplitDynamicUniqueId:
             "dynamic_rule:192-0-2-1-32": ("dynamic_rule:", "192-0-2-1-32"),
             "backend:resolver": ("backend:", "resolver"),
             "backend_queries:resolver": ("backend_queries:", "resolver"),
-            "backend_switch:resolver": ("backend_switch:", "resolver"),
         }
         for tail, expected in cases.items():
             assert split_dynamic_unique_id(f"{ENTRY_ID}:{tail}", ENTRY_ID) == expected
@@ -196,14 +196,13 @@ class TestPruneOrphanedEntities:
         registry = prune_entities(entries, {ATTR_DYNAMIC_RULES: {"10-0-0-2-32": {}}})
         assert registry.removed == ["sensor.gone"]
 
-    def test_removes_deleted_backend_from_all_three_platforms(self):
+    def test_removes_deleted_backend_from_both_platforms(self):
         entries = [
             FakeRegistryEntry("sensor.q", f"{ENTRY_ID}:backend_queries:old"),
             FakeRegistryEntry("binary_sensor.h", f"{ENTRY_ID}:backend:old"),
-            FakeRegistryEntry("switch.s", f"{ENTRY_ID}:backend_switch:old"),
         ]
         registry = prune_entities(entries, {ATTR_BACKENDS: {"new": {}}})
-        assert sorted(registry.removed) == ["binary_sensor.h", "sensor.q", "switch.s"]
+        assert sorted(registry.removed) == ["binary_sensor.h", "sensor.q"]
 
     def test_keeps_fixed_entities(self):
         entries = [
@@ -246,6 +245,39 @@ class TestPruneOrphanedEntities:
         data = {ATTR_FILTERING_RULES: {"block-ads": {"name": "Block Ads", "uuid": "abc", "id": 1}}}
         registry = prune_entities(entries, data)
         assert registry.removed == ["sensor.rule"]
+
+
+# ---------------------------------------------------------------------------
+# async_remove_retired_entities
+# ---------------------------------------------------------------------------
+
+
+def remove_retired(entries):
+    """Run the retired entity sweep against a fake registry and return it."""
+    registry = FakeEntityRegistry(entries)
+    with patch("custom_components.dnsdist.utils.er") as er_mock:
+        er_mock.async_get.return_value = registry
+        er_mock.async_entries_for_config_entry.side_effect = lambda reg, entry_id: list(reg.entries)
+        async_remove_retired_entities(MagicMock(), ENTRY_ID)
+    return registry
+
+
+class TestRemoveRetiredEntities:
+    def test_removes_the_backend_switch(self):
+        entries = [FakeRegistryEntry("switch.s", f"{ENTRY_ID}:backend_switch:resolver")]
+        assert remove_retired(entries).removed == ["switch.s"]
+
+    def test_keeps_the_live_backend_entities(self):
+        entries = [
+            FakeRegistryEntry("sensor.q", f"{ENTRY_ID}:backend_queries:resolver"),
+            FakeRegistryEntry("binary_sensor.h", f"{ENTRY_ID}:backend:resolver"),
+            FakeRegistryEntry("button.clear", f"{ENTRY_ID}:btn_clear_cache"),
+        ]
+        assert remove_retired(entries).removed == []
+
+    def test_other_entry_is_ignored(self):
+        entries = [FakeRegistryEntry("switch.s", "other:backend_switch:resolver")]
+        assert remove_retired(entries).removed == []
 
 
 # ---------------------------------------------------------------------------

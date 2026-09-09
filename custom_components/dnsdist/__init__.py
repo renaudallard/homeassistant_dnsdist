@@ -65,13 +65,13 @@ from .const import (
 from . import binary_sensor  # noqa: F401  # pylint: disable=unused-import
 from . import button  # noqa: F401  # pylint: disable=unused-import
 from . import sensor  # noqa: F401  # pylint: disable=unused-import
-from . import switch  # noqa: F401  # pylint: disable=unused-import
 from .coordinator import DnsdistCoordinator
 from .group_coordinator import DnsdistGroupCoordinator
 from .services import register_dnsdist_services
 from .utils import (
     async_prune_orphaned_devices,
     async_prune_orphaned_entities,
+    async_remove_retired_entities,
     device_identifier,
 )
 
@@ -244,6 +244,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await coordinator.async_config_entry_first_refresh()
+
+    retired = async_remove_retired_entities(hass, entry.entry_id)
+    if retired:
+        _LOGGER.info("[dnsdist] Removed %d entities of retired platforms from '%s'", retired, name)
 
     # Drop the entities of rules, dynblocks and backends that are gone.  This
     # has to happen before the platforms start: they set up concurrently and

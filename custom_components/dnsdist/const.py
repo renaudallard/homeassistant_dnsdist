@@ -33,7 +33,7 @@ DOMAIN = "dnsdist"
 DEFAULT_UPDATE_INTERVAL = 30
 
 # Platforms used by this integration
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
 
 # Dispatcher signal names (safe to import everywhere)
 SIGNAL_DNSDIST_RELOAD = f"{DOMAIN}_reload_groups"
@@ -90,8 +90,12 @@ DYNAMIC_ENTITY_PREFIXES = {
     "dynamic_rule:": ATTR_DYNAMIC_RULES,
     "backend:": ATTR_BACKENDS,
     "backend_queries:": ATTR_BACKENDS,
-    "backend_switch:": ATTR_BACKENDS,
 }
+
+# Unique ID prefixes of entities the integration used to create and no longer
+# does. Home Assistant keeps the registry entry of a dropped platform, where it
+# then sits unavailable for ever, so these are deleted on setup.
+RETIRED_ENTITY_PREFIXES = ("backend_switch:",)
 
 # Storage helpers
 STORAGE_VERSION = 1

@@ -53,7 +53,7 @@ Monitor every proxy, surface aggregated insights, and control dnsdist safely thr
 - **UI-only setup** with zero YAML required
 - **Multiple hosts**, each dnsdist endpoint becomes its own device
 - **Aggregated groups** with smart rollups (sum counters, average CPU, max uptime, priority security status)
-- **Backend monitoring** with per-backend health (binary sensor), query counters, and enable/disable switches
+- **Backend monitoring** with per-backend health (binary sensor) and query counters
 - **Filtering rule sensors** for per-rule match counts with idle/active icons
 - **Dynamic rule sensors** for temporary blocks (dynblocks) from rate limiting and DoS protection
 - **Custom Lovelace card** with gauges, counters, filtering rules, and dynamic rules
@@ -142,11 +142,15 @@ Additional dynamic entities (created per backend / per rule):
 |---|---|---|
 | `Backend <address>` | binary sensor | Backend health (up/down) |
 | `Backend <address> Queries` | sensor | Per-backend query counter (`TOTAL_INCREASING`) |
-| `Backend <address>` | switch | Enable/disable backend via REST API |
 | `Filter <rule name>` | sensor | Per-rule match count with idle/active icons |
 | `Dynblock <network>` | sensor | Block count with reason, action, time remaining |
 
 > Rate sensors are extrapolated from available history until enough data is collected (1h / 24h), then switch to actual measured values.
+
+There is no backend enable/disable switch. dnsdist serves its HTTP API from an
+exact-path handler table and only accepts a write on the cache and the ACL, so
+no REST call can take a backend out of rotation. Use `setDown()` on the console
+instead.
 
 Dynamic entities are removed as soon as their dnsdist object is gone: an expired dynblock, a deleted
 filtering rule, a backend taken out of the configuration. The registry is also reconciled when the entry
@@ -272,7 +276,6 @@ custom_components/dnsdist/
   const.py             sensor.py            button.py
   utils.py             services.py          diagnostics.py
   strings.json         services.yaml        binary_sensor.py
-                                            switch.py
   translations/
     en.json
   brand/               icon.png, logo.png (HA 2026.3+)
