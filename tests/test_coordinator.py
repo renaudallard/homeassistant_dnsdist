@@ -25,6 +25,7 @@
 
 """Tests for DnsdistCoordinator normalization logic."""
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 from custom_components.dnsdist.coordinator import DnsdistCoordinator
@@ -57,6 +58,38 @@ def make_coordinator(update_interval=30):
             verify_ssl=True,
             update_interval=update_interval,
         )
+
+
+class FakeResponse:
+    """Stand-in for an aiohttp response used as an async context manager."""
+
+    def __init__(self, status, payload):
+        self.status = status
+        self._payload = payload
+
+    async def json(self):
+        return self._payload
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class FakeSession:
+    def __init__(self, response):
+        self._response = response
+
+    def get(self, *args, **kwargs):
+        return self._response
+
+
+def fetch_dynamic(payload, status=200):
+    """Run the dynblock fetch against a canned response."""
+    coord = make_coordinator()
+    session = FakeSession(FakeResponse(status, payload))
+    return coord, asyncio.run(coord._async_fetch_dynamic_rules(session, {}))
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +387,31 @@ class TestParseFilteringRules:
         merged = self.coord._parse_filtering_rules(payload)["block-ads"]
         assert merged["uuid"] is None
         assert merged["id"] is None
+
+
+class TestFetchDynamicRules:
+    def test_reads_the_dynblock_mapping(self):
+        payload = {"10.0.0.1/32": {"blocks": 3, "reason": "rate", "seconds": 30}}
+        _, rules = fetch_dynamic(payload)
+        assert list(rules) == ["10-0-0-1-32"]
+        assert rules["10-0-0-1-32"]["blocks"] == 3
+
+    def test_empty_mapping_means_no_dynblocks(self):
+        assert fetch_dynamic({})[1] == {}
+
+    def test_unreadable_payload_is_not_an_empty_one(self):
+        """An empty mapping deletes every dynblock sensor, so do not fake one."""
+        for payload in ([], "nope", 42, None):
+            assert fetch_dynamic(payload)[1] is None, payload
+
+    def test_a_404_latches_the_endpoint_off(self):
+        coord, rules = fetch_dynamic({}, status=404)
+        assert rules is None
+        assert coord._dynamic_rules_supported is False
+
+    def test_an_unreadable_payload_does_not_latch_the_endpoint(self):
+        coord, _ = fetch_dynamic([])
+        assert coord._dynamic_rules_supported is None
 
 
 # ---------------------------------------------------------------------------

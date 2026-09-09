@@ -497,22 +497,17 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.debug("[%s] Could not retrieve dynamic rules: %s", self._name, err)
             return None
 
-        if payload is None:
+        # Response format: {"127.0.0.1/32": {"blocks": 3, "reason": "...", "seconds": 10}, ...}
+        # Anything else could not be read, which is not the same as dnsdist
+        # having no dynamic blocks: an empty mapping deletes every sensor.
+        if not isinstance(payload, dict):
+            _LOGGER.debug("[%s] Unexpected dynamic rules payload: %r", self._name, payload)
             return None
 
         self._dynamic_rules_supported = True
 
-        # Response format: {"127.0.0.1/32": {"blocks": 3, "reason": "...", "seconds": 10}, ...}
-        dynblocks_raw: dict[str, Any] = {}
-        if isinstance(payload, dict):
-            # The response is directly a dict keyed by network
-            dynblocks_raw = payload
-
-        if not dynblocks_raw:
-            return {}
-
         rules: dict[str, dict[str, Any]] = {}
-        for key, item in dynblocks_raw.items():
+        for key, item in payload.items():
             if not isinstance(item, dict):
                 continue
             normalized = self._normalize_dynamic_rule(key, item)
