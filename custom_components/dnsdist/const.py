@@ -105,6 +105,7 @@ RETIRED_ENTITY_PREFIXES = ("backend_switch:",)
 # Storage helpers
 STORAGE_VERSION = 1
 STORAGE_KEY_HISTORY = "history"
+STORAGE_KEY_LAST_RAW = "last_raw"
 
 # Shortest gap between two writes of the rolling request history. Writing the
 # whole 24 hours of samples once per poll wears out the flash on a small board

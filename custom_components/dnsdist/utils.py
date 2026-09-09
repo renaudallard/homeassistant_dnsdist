@@ -70,6 +70,7 @@ from .const import (
     HISTORY_SAVE_INTERVAL,
     RETIRED_ENTITY_PREFIXES,
     STORAGE_KEY_HISTORY,
+    STORAGE_KEY_LAST_RAW,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -460,6 +461,7 @@ class HistoryMixin:
 
     Subclasses must define:
         _history: Deque[Tuple[float, int]]
+        _last_raw: int | None
         _history_loaded: bool
         _history_dirty: bool
         _last_history_persist: float | None
@@ -468,6 +470,7 @@ class HistoryMixin:
     """
 
     _history: Deque[Tuple[float, int]]
+    _last_raw: int | None
     _history_loaded: bool
     _history_dirty: bool
     _last_history_persist: float | None
@@ -489,6 +492,10 @@ class HistoryMixin:
 
         if not isinstance(stored, dict):
             return
+
+        last_raw = stored.get(STORAGE_KEY_LAST_RAW)
+        if isinstance(last_raw, (int, float)) and not isinstance(last_raw, bool):
+            self._last_raw = int(last_raw)
 
         entries = stored.get(STORAGE_KEY_HISTORY)
         if not isinstance(entries, list):
@@ -517,7 +524,10 @@ class HistoryMixin:
 
     def _history_payload(self) -> dict[str, Any]:
         """Build the payload the store writes when the queued save fires."""
-        return {STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history]}
+        return {
+            STORAGE_KEY_HISTORY: [(float(ts), int(val)) for ts, val in self._history],
+            STORAGE_KEY_LAST_RAW: self._last_raw,
+        }
 
     @callback
     def _async_save_history(self) -> None:
@@ -538,16 +548,26 @@ class HistoryMixin:
         self._history_store.async_delay_save(self._history_payload)
 
     def _update_history(self, now_ts: float, query_count: int) -> None:
-        """Update history with new data point and trim old entries.
+        """Add a sample to the rolling history and trim it to 24 hours.
 
-        Resets history if counter went backwards (service restart).
-        Trims entries older than 24 hours.
+        What goes in is a running total of the traffic we have watched go past,
+        not the counter dnsdist reports. A restart therefore costs the single
+        interval it happened in, where taking the counter at face value meant
+        throwing the whole window away and rebuilding it over another day.
         """
-        # Reset history if counter went backwards (service restart)
-        if self._history and query_count < self._history[-1][1]:
-            self._history.clear()
+        if self._last_raw is None:
+            # Nothing to measure this against, so it brings no traffic of its own.
+            delta = 0
+        elif query_count >= self._last_raw:
+            delta = query_count - self._last_raw
+        else:
+            # The counter went backwards, so dnsdist restarted and everything it
+            # reports now has been served since it came back.
+            delta = query_count
 
-        self._history.append((now_ts, query_count))
+        self._last_raw = query_count
+        watched = self._history[-1][1] if self._history else 0
+        self._history.append((now_ts, watched + delta))
         self._history_dirty = True
 
         # Trim to last 24h
@@ -555,12 +575,12 @@ class HistoryMixin:
         while self._history and self._history[0][0] < cutoff_24h:
             self._history.popleft()
 
-    def _scale_to_window(self, history_span: float, query_count: int, window: int) -> int:
+    def _scale_to_window(self, history_span: float, watched: int, window: int) -> int:
         """Scale everything the history holds up to a full window."""
-        observed = query_count - self._history[0][1]
+        observed = watched - self._history[0][1]
         return max(0, int((observed / history_span) * window))
 
-    def _compute_rates(self, now_ts: float, query_count: int) -> tuple[int, int]:
+    def _compute_rates(self, now_ts: float) -> tuple[int, int]:
         """Compute hourly and daily request totals.
 
         An hour fits inside the retained history, so once there is an hour of it
@@ -579,9 +599,10 @@ class HistoryMixin:
         if history_span <= 0:
             return 0, 0
 
+        watched = self._history[-1][1]
         if history_span >= 3600:
-            req_per_hour = compute_window_total(self._history, now_ts, 3600, query_count)
+            req_per_hour = compute_window_total(self._history, now_ts, 3600, watched)
         else:
-            req_per_hour = self._scale_to_window(history_span, query_count, 3600)
+            req_per_hour = self._scale_to_window(history_span, watched, 3600)
 
-        return req_per_hour, self._scale_to_window(history_span, query_count, 86400)
+        return req_per_hour, self._scale_to_window(history_span, watched, 86400)

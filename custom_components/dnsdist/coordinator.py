@@ -110,6 +110,8 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         # Rolling history of (wallclock_ts, queries_counter) for rate sensors.
         # Capped at 24 hours worth of samples to bound memory usage.
         self._history: Deque[Tuple[float, int]] = deque(maxlen=(86400 // update_interval) + 1)
+        # Last counter dnsdist reported, so a restart can be told from traffic
+        self._last_raw: int | None = None
         self._history_dirty = False
         self._last_history_persist: float | None = None
         self._history_store = Store(
@@ -226,7 +228,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             now_ts = time.time()
             q = int(normalized.get(ATTR_QUERIES, 0))
             self._update_history(now_ts, q)
-            req_hour, req_day = self._compute_rates(now_ts, q)
+            req_hour, req_day = self._compute_rates(now_ts)
             normalized[ATTR_REQ_PER_HOUR] = req_hour
             normalized[ATTR_REQ_PER_DAY] = req_day
         except Exception as err:

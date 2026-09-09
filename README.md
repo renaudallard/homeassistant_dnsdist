@@ -59,7 +59,7 @@ Monitor every proxy, surface aggregated insights, and clear caches over the REST
 - **Dynamic rule sensors** for temporary blocks (dynblocks) from rate limiting and DoS protection
 - **Custom Lovelace card** with gauges, counters, filtering rules, and dynamic rules
 - **Long-term statistics ready** sensors (`TOTAL_INCREASING` counters, `MEASUREMENT` percentages)
-- **Rolling request rates** (`req_per_hour`, `req_per_day`) with history persisted across restarts, written at most every 5 minutes and on shutdown
+- **Rolling request rates** (`req_per_hour`, `req_per_day`) that survive a restart of Home Assistant or of dnsdist, written to disk at most every 5 minutes and on shutdown
 - **Secure by default** with HTTPS and SSL verification
 - **Diagnostics bundle** with automatic secret redaction
 - **REST-only service**: `clear_cache`
@@ -159,6 +159,8 @@ Additional dynamic entities (created per backend / per rule):
 > Request rates start out scaled up from whatever history exists. Once an hour of history has built up,
 > the hourly figure becomes a real count over the trailing hour. The daily figure stays scaled from the
 > retained 24 hours, which comes within a rounding error of the measured count once a day has gone by.
+> What is kept is the traffic watched go past rather than the counter dnsdist reports, so a dnsdist
+> restart costs the one poll interval it happened in instead of the whole window.
 
 There is no backend enable/disable switch. dnsdist serves its HTTP API from an
 exact-path handler table and only accepts a write on the cache and the ACL, so

@@ -30,6 +30,7 @@ from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 from custom_components.dnsdist.coordinator import DnsdistCoordinator
+from custom_components.dnsdist.utils import compute_window_total
 from custom_components.dnsdist.const import (
     ATTR_CACHE_HITS,
     ATTR_CACHE_HITRATE,
@@ -220,34 +221,62 @@ class TestCpuUsage:
         assert poll(coord, self.stats(500_900), elapsed=30)[ATTR_CPU] == 3.0
 
 
-class TestComputeRates:
-    def rates(self, samples, now_ts, query_count):
-        coord = make_coordinator()
-        coord._history.extend(samples)
-        return coord._compute_rates(now_ts, query_count)
+class TestHistoryAndRates:
+    """The history holds traffic watched go past, not the counter dnsdist reports."""
+
+    def feed(self, coord, samples):
+        """Push (timestamp, raw dnsdist counter) samples through the real path."""
+        for ts, raw in samples:
+            coord._update_history(ts, raw)
+        return coord
 
     def test_no_history_is_no_rate(self):
-        assert make_coordinator()._compute_rates(1000.0, 50) == (0, 0)
+        assert make_coordinator()._compute_rates(1000.0) == (0, 0)
 
     def test_a_single_sample_is_no_rate(self):
-        assert self.rates([(1000.0, 50)], 1000.0, 50) == (0, 0)
+        coord = self.feed(make_coordinator(), [(1000.0, 500)])
+        assert coord._compute_rates(1000.0) == (0, 0)
+
+    def test_the_first_sample_carries_no_traffic(self):
+        """There is nothing yet to measure it against."""
+        coord = self.feed(make_coordinator(), [(1000.0, 999_999)])
+        assert list(coord._history) == [(1000.0, 0)]
 
     def test_short_history_is_scaled_up_to_the_window(self):
         # 100 queries in the last minute
-        assert self.rates([(940.0, 0)], 1000.0, 100) == (6000, 144000)
+        coord = self.feed(make_coordinator(), [(940.0, 0), (1000.0, 100)])
+        assert coord._compute_rates(1000.0) == (6000, 144000)
 
     def test_an_hour_of_history_is_measured_not_scaled(self):
-        hour_ago = 1000.0 - 3600
-        req_per_hour, _ = self.rates([(hour_ago, 0), (1000.0, 720)], 1000.0, 720)
-        assert req_per_hour == 720
+        coord = self.feed(make_coordinator(), [(1000.0 - 3600, 0), (1000.0, 720)])
+        assert coord._compute_rates(1000.0)[0] == 720
 
     def test_a_day_of_history_lands_on_the_measured_count(self):
-        day_ago = 1000.0 - 86400
-        _, req_per_day = self.rates([(day_ago, 0), (1000.0, 5000)], 1000.0, 5000)
-        assert req_per_day == 5000
+        coord = self.feed(make_coordinator(), [(1000.0 - 86400, 0), (1000.0, 5000)])
+        assert coord._compute_rates(1000.0)[1] == 5000
 
-    def test_a_counter_that_went_backwards_never_goes_negative(self):
-        assert self.rates([(940.0, 500)], 1000.0, 100) == (0, 0)
+    def test_a_dnsdist_restart_costs_one_interval_not_the_window(self):
+        coord = self.feed(make_coordinator(), [(0.0, 0), (1800.0, 1000), (3600.0, 2000)])
+        coord._update_history(5400.0, 5)
+        assert len(coord._history) == 4, "nothing may be thrown away"
+        assert coord._history[-1][1] == 2005, "2000 watched before the restart, 5 since"
+
+    def test_rates_survive_a_restart(self):
+        coord = self.feed(make_coordinator(), [(0.0, 0), (3600.0, 3600)])
+        coord._update_history(7200.0, 100)
+        # 3600 watched over the first hour, then 100 more
+        assert coord._compute_rates(7200.0)[0] == compute_window_total(coord._history, 7200.0, 3600, 3700)
+
+    def test_the_series_never_goes_backwards(self):
+        coord = self.feed(make_coordinator(), [(0.0, 500), (30.0, 400), (60.0, 10), (90.0, 60)])
+        totals = [total for _, total in coord._history]
+        assert totals == sorted(totals)
+        assert all(rate >= 0 for rate in coord._compute_rates(90.0))
+
+    def test_samples_older_than_a_day_are_trimmed(self):
+        coord = self.feed(make_coordinator(), [(0.0, 0), (100.0, 10)])
+        coord._update_history(86400.0 + 200.0, 20)
+        assert [ts for ts, _ in coord._history] == [86600.0]
 
 
 # ---------------------------------------------------------------------------
