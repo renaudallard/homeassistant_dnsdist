@@ -32,6 +32,12 @@ DOMAIN = "dnsdist"
 # Default update interval in seconds
 DEFAULT_UPDATE_INTERVAL = 30
 
+# How many polls a group carries its last reading forward while a member has no
+# coordinator loaded. Members are only ever briefly absent, between an entry
+# unloading and loading again, but one that never comes back must not freeze the
+# group for good on figures that go on looking live.
+HOLD_POLLS_FOR_MISSING_MEMBER = 3
+
 # Platforms used by this integration
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
 

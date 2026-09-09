@@ -54,6 +54,7 @@ from .const import (
     ATTR_UPTIME,
     CONF_NAME,
     DOMAIN,
+    HOLD_POLLS_FOR_MISSING_MEMBER,
     SIGNAL_DNSDIST_RELOAD,
 )
 from .utils import coerce_int, is_group_entry, slugify_rule
@@ -89,6 +90,8 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # dropping to zero restarts the long term statistics. With the key
         # simply absent the sensor reads unknown, which the statistics skip.
         self._last_data: dict[str, Any] = {}
+        # Consecutive polls spent waiting on a member that is not loaded
+        self._held_polls = 0
         self._unsub_dispatcher = async_dispatcher_connect(hass, SIGNAL_DNSDIST_RELOAD, self._handle_reload_signal)
         _LOGGER.info("Initialized dnsdist group '%s' with members: %s", name, ", ".join(self._members))
 
@@ -110,10 +113,6 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             all_coords = self.hass.data.get(DOMAIN, {})
             member_states = self._member_states(all_coords)
-
-            if not all_coords:
-                return {**self._last_data, ATTR_MEMBERS: member_states}
-
             active_members = []
 
             for _, c in all_coords.items():
@@ -123,8 +122,9 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     active_members.append(c)
 
             if not active_members:
-                _LOGGER.debug("[%s] No active members yet", self._name)
-                return {**self._last_data, ATTR_MEMBERS: member_states}
+                if self._should_hold("no members are loaded"):
+                    return {**self._last_data, ATTR_MEMBERS: member_states}
+                return {ATTR_MEMBERS: member_states}
 
             # Publishing an aggregate that is missing a member would make the
             # counters fall, and a falling TOTAL_INCREASING sensor is a meter
@@ -140,8 +140,10 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 state["name"] for state in member_states.values() if state["name"] in expected and not state["loaded"]
             )
             if waiting:
-                _LOGGER.debug("[%s] Holding the last reading, waiting for %s", self._name, ", ".join(waiting))
-                return {**self._last_data, ATTR_MEMBERS: member_states}
+                if self._should_hold(f"waiting for {', '.join(waiting)}"):
+                    return {**self._last_data, ATTR_MEMBERS: member_states}
+            else:
+                self._held_polls = 0
 
             totals = {
                 ATTR_QUERIES: 0,
@@ -310,6 +312,30 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             _LOGGER.warning("[%s] Aggregation error: %s", self._name, err)
             return self._last_data
+
+    def _should_hold(self, reason: str) -> bool:
+        """Say whether to carry the last aggregate forward one more poll.
+
+        Holding is bounded because the assumption behind it, that a member is
+        only ever briefly absent, is not something the group can enforce. A
+        member entry that fails to set up never reaches hass.data at all, and
+        without a floor the group would sit on its last reading for ever while
+        the figures went on looking live.
+        """
+        self._held_polls += 1
+        if self._held_polls <= HOLD_POLLS_FOR_MISSING_MEMBER:
+            _LOGGER.debug("[%s] Holding the last reading, %s", self._name, reason)
+            return True
+
+        if self._held_polls == HOLD_POLLS_FOR_MISSING_MEMBER + 1:
+            _LOGGER.warning(
+                "[%s] Reporting on the members that are left after %d polls, %s",
+                self._name,
+                self._held_polls,
+                reason,
+            )
+
+        return False
 
     def _member_states(self, all_coords: dict[str, Any]) -> dict[str, dict[str, Any]]:
         """Report on each configured member, keyed by slug.

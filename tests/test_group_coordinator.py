@@ -48,6 +48,7 @@ from custom_components.dnsdist.const import (
     ATTR_UPTIME,
     CONF_NAME,
     DOMAIN,
+    HOLD_POLLS_FOR_MISSING_MEMBER,
 )
 
 
@@ -219,6 +220,33 @@ class TestPartialMembership:
             "e1": make_member("h1", base_data(**{ATTR_QUERIES: q})),
             "e2": make_member("h2", base_data(**{ATTR_QUERIES: q})),
         }
+
+    def test_a_member_that_never_comes_back_stops_being_waited_for(self):
+        """A member entry that fails to set up never reaches hass.data at all."""
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1000)) == 2000
+
+        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
+        held = [self.queries(coord, hass, only_one) for _ in range(HOLD_POLLS_FOR_MISSING_MEMBER)]
+        assert held == [2000] * HOLD_POLLS_FOR_MISSING_MEMBER, "held while it might still return"
+        assert self.queries(coord, hass, only_one) == 1200, "then reports what is actually there"
+
+    def test_the_hold_starts_over_after_a_full_reading(self):
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1000)) == 2000
+        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
+        for _ in range(HOLD_POLLS_FOR_MISSING_MEMBER):
+            self.queries(coord, hass, only_one)
+        assert self.queries(coord, hass, self.both(1300)) == 2600
+        assert self.queries(coord, hass, only_one) == 2600, "the count reset with the full reading"
+
+    def test_a_group_left_with_no_members_stops_reporting(self):
+        """Stale figures that look live are worse than saying nothing."""
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1000)) == 2000
+        for _ in range(HOLD_POLLS_FOR_MISSING_MEMBER):
+            assert run_aggregation(coord, hass, {})[ATTR_QUERIES] == 2000
+        assert ATTR_QUERIES not in run_aggregation(coord, hass, {})
 
     def test_a_loaded_but_failing_member_is_not_waited_for(self):
         """That state can last, so holding for it would freeze the group."""
