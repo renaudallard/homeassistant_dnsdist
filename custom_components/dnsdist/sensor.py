@@ -344,7 +344,6 @@ class DnsdistDynamicRuleSensor(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = False
     _attr_should_poll = False
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = COUNT
 
     def __init__(

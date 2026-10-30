@@ -58,7 +58,7 @@ Monitor every proxy, surface aggregated insights, and clear caches over the REST
 - **Filtering rule sensors** for per-rule match counts with idle/active icons
 - **Dynamic rule sensors** for temporary blocks (dynblocks) from rate limiting and DoS protection
 - **Custom Lovelace card** with gauges, counters, filtering rules, and dynamic rules
-- **Long-term statistics ready** sensors (`TOTAL_INCREASING` counters, `MEASUREMENT` percentages)
+- **Long-term statistics ready** sensors (`TOTAL_INCREASING` counters, `MEASUREMENT` percentages), except dynblocks, which are too short lived to keep
 - **Rolling request rates** (`req_per_hour`, `req_per_day`) that survive a restart of Home Assistant or of dnsdist, written to disk at most every 5 minutes and on shutdown
 - **Secure by default** with HTTPS and SSL verification
 - **Diagnostics bundle** with automatic secret redaction
@@ -289,6 +289,9 @@ custom_components/dnsdist/
 ---
 
 ## Changelog
+
+### 1.5.5
+- Stop keeping long term statistics for dynblock sensors. A dynblock only lasts until it expires, but each one left a statistic behind that outlived its entity, so the statistics list filled up with dead entries. The sensors keep their state and history, they just no longer have a state class. A dynblock still active during the upgrade shows a "no longer has a state class" repair until it expires. Statistics left by earlier dynblocks are listed as having no state in Developer Tools, Statistics, and can be deleted from there
 
 ### 1.5.4
 - Put a floor under how long a group holds its last reading. 1.5.3 taught it to wait for a member that has no coordinator loaded, on the assumption that absence is always brief, which the group cannot enforce. A member that never came back froze the group on its last figures for good, and those figures went on looking live. It now holds for three polls, then reports on the members that are actually there and says once in the log which one it gave up on. A group left with no members at all reports nothing rather than a stale total, which it had been doing since long before 1.5.3
