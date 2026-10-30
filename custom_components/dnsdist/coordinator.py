@@ -146,25 +146,16 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                     stats = await resp.json()
         except aiohttp.ClientSSLError as err:
             _LOGGER.warning("[%s] SSL error: %s", self._name, err)
-            self._reachable = False
-            data = dict(self.data or self._zero_data())
-            return data
+            return self._unread()
         except aiohttp.ClientConnectorError as err:
             _LOGGER.warning("[%s] Connection failed: %s", self._name, err)
-            self._reachable = False
-            data = dict(self.data or self._zero_data())
-            return data
+            return self._unread()
         except TimeoutError:
             _LOGGER.warning("[%s] Request timed out after 10s", self._name)
-            self._reachable = False
-            data = dict(self.data or self._zero_data())
-            return data
+            return self._unread()
         except Exception as err:
             _LOGGER.warning("[%s] Fetch error: %s", self._name, err)
-            # Preserve last data to avoid sensor going unavailable
-            self._reachable = False
-            data = dict(self.data or self._zero_data())
-            return data
+            return self._unread()
 
         self._reachable = True
 
@@ -259,6 +250,18 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.debug("[%s] Dynamic rules fetch failed: %s", self._name, err)
 
         return normalized
+
+    def _unread(self) -> dict[str, Any]:
+        """Publish the last reading again after a poll that got no answer.
+
+        Before the first reading there is nothing to repeat, and that has to
+        stay nothing rather than zeros. The counters are TOTAL_INCREASING, so
+        a zero after the value recorded before a restart is a meter reset, and
+        the statistics would add the whole counter again once the host answers.
+        A missing key reads unknown instead, which the statistics skip.
+        """
+        self._reachable = False
+        return dict(self.data or {})
 
     @property
     def reachable(self) -> bool | None:

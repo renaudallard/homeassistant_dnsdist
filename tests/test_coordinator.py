@@ -106,6 +106,25 @@ class RoutedSession:
         return FakeResponse(404, None)
 
 
+class DeadSession:
+    """A host that never answers."""
+
+    def get(self, url, **kwargs):
+        raise TimeoutError
+
+
+def poll_dead(coord):
+    """Run one update against a host that does not answer."""
+    coord._history_loaded = True
+    with (
+        patch("custom_components.dnsdist.coordinator.async_get_clientsession", return_value=DeadSession()),
+        patch.object(coord, "_async_save_history"),
+    ):
+        coord.data = asyncio.run(coord._async_update_data())
+
+    return coord.data
+
+
 def poll(coord, stats_payload, elapsed=None):
     """Run one full update, storing the result the way the coordinator does.
 
@@ -191,6 +210,25 @@ class TestReachable:
         coord = make_coordinator()
         poll(coord, [{"name": "queries", "value": 1.0}])
         assert coord.reachable is True
+
+    def test_false_when_a_poll_gets_no_answer(self):
+        coord = make_coordinator()
+        poll_dead(coord)
+        assert coord.reachable is False
+
+
+class TestUnanswered:
+    """A falling TOTAL_INCREASING counter is a meter reset to the statistics."""
+
+    def test_nothing_before_the_first_reading(self):
+        # Zeros here would be a fall from what was recorded before a restart
+        coord = make_coordinator()
+        assert poll_dead(coord) == {}
+
+    def test_last_reading_carries_forward(self):
+        coord = make_coordinator()
+        poll(coord, [{"name": "queries", "value": 500.0}])
+        assert poll_dead(coord)[ATTR_QUERIES] == 500
 
 
 class TestCpuUsage:

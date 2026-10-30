@@ -291,6 +291,7 @@ custom_components/dnsdist/
 ## Changelog
 
 ### 1.5.6
+- Report nothing rather than zero when a host cannot be reached on its first poll. After a Home Assistant restart, or an entry reload, there is no last reading to carry forward, so a host that was down published zeros. A counter falling to zero reads as a meter reset, and once the host answered again the long term statistics counted its whole lifetime a second time. The counters now read unknown until the first answer, which the statistics skip
 - Stop writing the API key to the debug log when a host is added. The add host step logged everything the form returned, key included, and debug logs are what gets pasted into issues
 
 ### 1.5.5
