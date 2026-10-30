@@ -426,6 +426,15 @@ class TestGroupAggregationCPU:
         result = run_aggregation(coord, hass, {"e1": c1})
         assert ATTR_CPU not in result
 
+    def test_an_unreachable_member_drops_out_of_cpu_and_uptime(self):
+        """Its last figures describe a server it no longer is."""
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        alive = make_member("h1", base_data(cpu=10.0, uptime=100))
+        dead = make_member("h2", base_data(cpu=80.0, uptime=9000), reachable=False)
+        result = run_aggregation(coord, hass, {"e1": alive, "e2": dead})
+        assert result[ATTR_CPU] == 10.0
+        assert result[ATTR_UPTIME] == 100
+
     def test_skips_invalid_cpu_values(self):
         coord, hass = make_group_coordinator(members=["h1", "h2"])
         c1 = make_member("h1", base_data(cpu="not-a-number"))
@@ -444,12 +453,12 @@ class TestGroupAggregationUptime:
         result = run_aggregation(coord, hass, {"e1": c1, "e2": c2, "e3": c3})
         assert result[ATTR_UPTIME] == 5000
 
-    def test_uptime_zero_when_no_members(self):
+    def test_uptime_left_out_when_no_members_report_it(self):
         coord, hass = make_group_coordinator(members=["h1"])
         c1 = make_member("h1", base_data())
         del c1.data[ATTR_UPTIME]
         result = run_aggregation(coord, hass, {"e1": c1})
-        assert result[ATTR_UPTIME] == 0
+        assert ATTR_UPTIME not in result
 
 
 class TestGroupAggregationSecurityStatus:
