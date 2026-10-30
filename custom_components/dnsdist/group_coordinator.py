@@ -271,15 +271,14 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if isinstance(dynamic_rules, dict):
                     dynamic_reporters += 1
                     source_name = getattr(c, "_name", "dnsdist")
-                    for rule in dynamic_rules.values():
+                    # The member's own slug, so the two spell a network alike
+                    for agg_slug, rule in dynamic_rules.items():
                         if not isinstance(rule, dict):
                             continue
 
                         network = str(rule.get("network") or "Unknown").strip()
                         if not network:
                             network = "Unknown"
-
-                        agg_slug = slugify_rule(network)
                         blocks = coerce_int(rule.get("blocks"))
 
                         entry = aggregated_dynamic.setdefault(

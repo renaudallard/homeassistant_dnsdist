@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import time
 from asyncio import timeout
@@ -68,6 +69,20 @@ from .const import (
 from .utils import HistoryMixin, coerce_int, make_zero_data, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _network_slug(network: str) -> str:
+    """Slug a dynblock key, spelling an IPv6 network out in full first.
+
+    The slug drops the colons, so 2001:db8::1/128 and 2001:db8:1::/128 would
+    both come out as 2001-db8-1-128 and one block would hide the other.
+    """
+    if ":" in network:
+        try:
+            network = ipaddress.ip_network(network, strict=False).exploded
+        except ValueError:
+            pass
+    return slugify_rule(network)
 
 
 def _is_statistics(stats: Any) -> bool:
@@ -577,7 +592,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         if not network:
             return None
 
-        slug = slugify_rule(network)
+        slug = _network_slug(network)
 
         # Extract block count from various possible field names
         blocks = 0

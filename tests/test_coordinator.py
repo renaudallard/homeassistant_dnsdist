@@ -866,3 +866,14 @@ class TestRedirects:
             asyncio.run(coord._async_update_data())
         assert len(session.calls) == 3
         assert all(call["allow_redirects"] is False for call in session.calls)
+
+
+class TestDynblockSlugs:
+    def test_ipv6_networks_that_slug_alike_stay_apart(self):
+        _, rules = fetch_dynamic({"2001:db8::1/128": {"blocks": 1}, "2001:db8:1::/128": {"blocks": 2}})
+        assert len(rules) == 2
+        assert {r["network"] for r in rules.values()} == {"2001:db8::1/128", "2001:db8:1::/128"}
+
+    def test_ipv4_and_suffixes_keep_their_slugs(self):
+        _, rules = fetch_dynamic({"10.0.0.1/32": {"blocks": 1}, "example.com.": {"blocks": 1}})
+        assert sorted(rules) == ["10-0-0-1-32", "example-com"]
