@@ -25,10 +25,15 @@
 
 """Tests for the dnsdist service helpers."""
 
-from unittest.mock import MagicMock
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from homeassistant.exceptions import HomeAssistantError
+
+from custom_components.dnsdist.button import ClearCacheButton
 from custom_components.dnsdist.const import DOMAIN
-from custom_components.dnsdist.services import _host_targets
+from custom_components.dnsdist.services import _host_targets, register_dnsdist_services
 
 
 def make_coord(name, *, is_host=True):
@@ -76,3 +81,53 @@ class TestHostTargets:
 
     def test_no_hosts_at_all(self):
         assert targets([], None) == []
+
+
+class TestClearCache:
+    """A failure has to reach the caller, or it looks like a cleared cache."""
+
+    def clear(self, coords, api, host=None):
+        hass = MagicMock()
+        hass.data = {DOMAIN: {f"entry-{i}": c for i, c in enumerate(coords)}}
+        asyncio.run(register_dnsdist_services(hass))
+        handler = hass.services.async_register.call_args.args[2]
+        call = MagicMock(data={"host": host} if host else {})
+        with patch("custom_components.dnsdist.services._call_dnsdist_api", api):
+            asyncio.run(handler(call))
+
+    def test_success_raises_nothing(self):
+        api = AsyncMock(side_effect=[(200, ""), (204, "")])
+        self.clear([make_coord("dns1"), make_coord("dns2")], api)
+        assert api.call_count == 2
+
+    def test_a_failure_is_reported_after_every_host_had_its_turn(self):
+        api = AsyncMock(side_effect=[(401, "unauthorized"), (200, ""), (-1, "timeout")])
+        with pytest.raises(HomeAssistantError, match=r"dns1 \(HTTP 401\), dns3 \(timeout\)"):
+            self.clear([make_coord("dns1"), make_coord("dns2"), make_coord("dns3")], api)
+        assert api.call_count == 3
+
+    def test_an_unknown_host_is_an_error(self):
+        with pytest.raises(HomeAssistantError, match="nope"):
+            self.clear([make_coord("dns1")], AsyncMock(), host="nope")
+
+    def test_no_hosts_at_all_is_an_error(self):
+        with pytest.raises(HomeAssistantError):
+            self.clear([], AsyncMock())
+
+
+class TestClearCacheButton:
+    def test_a_group_clears_every_member_before_reporting(self):
+        with patch("homeassistant.helpers.frame.report_usage"):
+            button = ClearCacheButton(MagicMock(), "e", is_group=True, members=["dns1", "dns2", "dns3"])
+        calls = []
+
+        async def service(domain, name, payload, blocking):
+            calls.append(payload["host"])
+            if payload["host"] != "dns2":
+                raise HomeAssistantError(f"failed on {payload['host']}")
+
+        button.hass = MagicMock()
+        button.hass.services.async_call = service
+        with pytest.raises(HomeAssistantError, match="failed on dns1; failed on dns3"):
+            asyncio.run(button.async_press())
+        assert calls == ["dns1", "dns2", "dns3"]

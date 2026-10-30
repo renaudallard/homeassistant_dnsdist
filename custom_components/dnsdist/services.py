@@ -33,6 +33,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, SERVICE_CLEAR_CACHE
@@ -132,15 +133,16 @@ async def register_dnsdist_services(hass: HomeAssistant):
 
         coords = _host_targets(hass, target)
         if not coords:
-            # Saying nothing at all looks exactly like a cache that was cleared.
+            # Returning quietly would look exactly like a cache that was cleared
             if target:
-                _LOGGER.warning("[dnsdist] clear_cache found no host called '%s'", target)
-            else:
-                _LOGGER.warning("[dnsdist] clear_cache found no dnsdist hosts to clear")
-            return
+                raise HomeAssistantError(f"No dnsdist host called '{target}'")
+            raise HomeAssistantError("No dnsdist hosts to clear")
 
+        # Every host gets its turn before the failures are reported, or the
+        # caller, a button or an automation, is told the cache was cleared.
+        failed: list[str] = []
         for coord in coords:
-            status, _ = await _call_dnsdist_api(
+            status, text = await _call_dnsdist_api(
                 coord,
                 "DELETE",
                 "/api/v1/cache",
@@ -159,6 +161,11 @@ async def register_dnsdist_services(hass: HomeAssistant):
                     pool,
                     status,
                 )
+                reason = f"HTTP {status}" if status > 0 else text
+                failed.append(f"{getattr(coord, '_name', '?')} ({reason})")
+
+        if failed:
+            raise HomeAssistantError(f"Cache clear failed on {', '.join(failed)}")
 
     # Register REST-only services
     hass.services.async_register(DOMAIN, SERVICE_CLEAR_CACHE, handle_clear_cache)

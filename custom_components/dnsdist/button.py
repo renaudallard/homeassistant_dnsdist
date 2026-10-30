@@ -33,6 +33,7 @@ from typing import Any, AsyncIterator
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -97,5 +98,13 @@ class ClearCacheButton(DnsdistActionButton):
         self._attr_unique_id = f"{entry_id}:btn_clear_cache"
 
     async def async_press(self) -> None:
+        # A group clears every member before it reports the ones that failed
+        failed: list[str] = []
         async for target in self._targets():
-            await self._call_service("clear_cache", host=target)
+            try:
+                await self._call_service("clear_cache", host=target)
+            except HomeAssistantError as err:
+                failed.append(str(err))
+
+        if failed:
+            raise HomeAssistantError("; ".join(failed))

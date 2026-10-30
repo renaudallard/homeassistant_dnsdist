@@ -251,6 +251,10 @@ data:
 
 Each host and group device also exposes a **Clear Cache** button. Group presses cascade to all members.
 
+The call fails when a host could not clear its cache, after every other host has had its turn, and names
+each host that failed and why. It also fails when no host matches `host`, so an automation or a button
+press never reports a cache as cleared when it was not.
+
 ---
 
 ## Troubleshooting
@@ -295,6 +299,7 @@ custom_components/dnsdist/
 ### 1.5.6
 - Report nothing rather than zero when a host cannot be reached on its first poll. After a Home Assistant restart, or an entry reload, there is no last reading to carry forward, so a host that was down published zeros. A counter falling to zero reads as a meter reset, and once the host answered again the long term statistics counted its whole lifetime a second time. The counters now read unknown until the first answer, which the statistics skip
 - Keep the group's counters as a running total of what each member served, instead of adding up the members' counters. The plain sum fell whenever a member's dnsdist restarted, while a member was on its first poll or reloading while unreachable, and when a member was renamed or left the group, and with two or three members every such fall was a reset that added the other members' whole lifetime to the long term statistics. A member joining did the opposite and added its own lifetime at once. The group's filtering rule matches get the same treatment. The totals are stored, so a restart or a reload carries on from them, and the hold that made a group wait for a reloading member is gone, since a missing member can no longer make the counters fall
+- Report a failed cache clear. The service only logged a warning, so a 401, a pool with no cache or a host that did not answer looked exactly like success to the button, the card and automations. It now fails once every host has had its turn, naming the ones that did not clear
 - Drop the latency attribute from the backend health sensor. It changes on every poll, so a backend that stayed up was recorded again each time, and the backend queries sensor already carries it
 - Keep filtering rules apart when different names make the same slug. Only letters and digits a to z survive the slug, so rules called "правило 1" and "блок 1" both became `1` and showed up as one sensor with their matches added together. Rules with the very same name are still counted together, since nothing dnsdist reports tells them apart
 - Keep IPv6 dynblocks apart. The slug drops the colons, so `2001:db8::1/128` and `2001:db8:1::/128` shared one sensor and one block hid the other. IPv6 networks are spelt out in full before the slug is made, which gives existing IPv6 dynblock sensors a new entity ID

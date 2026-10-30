@@ -451,15 +451,19 @@ export class DnsdistCard extends LitElement {
     const prefix = this._config.entity_prefix;
     const buttonEntity = `button.${prefix}_clear_cache`;
 
-    if (this.hass.states[buttonEntity]) {
-      await this.hass.callService('button', 'press', {
-        entity_id: buttonEntity,
-      });
-    } else {
-      // Fallback: call the dnsdist service directly
-      await this.hass.callService('dnsdist', 'clear_cache', {
-        host: prefix,
-      });
+    try {
+      if (this.hass.states[buttonEntity]) {
+        await this.hass.callService('button', 'press', {
+          entity_id: buttonEntity,
+        });
+      } else {
+        // Fallback: call the dnsdist service directly
+        await this.hass.callService('dnsdist', 'clear_cache', {
+          host: prefix,
+        });
+      }
+    } catch {
+      // Home Assistant has already shown the failure as a notification
     }
   }
 
