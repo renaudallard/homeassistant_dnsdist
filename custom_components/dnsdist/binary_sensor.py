@@ -122,7 +122,10 @@ class DnsdistBackendBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         backend = self._backend_data()
         attrs: dict[str, Any] = {}
-        for key in ("address", "name", "state", "order", "weight", "pools", "latency"):
+        # Not the latency, which changes on every poll: Home Assistant records a
+        # state whose attributes changed, so a backend that stayed up would get
+        # a new row each time. The backend queries sensor carries it instead.
+        for key in ("address", "name", "state", "order", "weight", "pools"):
             if key in backend and backend[key] is not None:
                 attrs[key] = backend[key]
         return attrs
