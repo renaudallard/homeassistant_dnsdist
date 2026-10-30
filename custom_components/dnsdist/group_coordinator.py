@@ -509,18 +509,21 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return states
 
     def _expected_members(self) -> list[str]:
-        """Return the members that still have a host entry in Home Assistant.
+        """Return the members the aggregate has to wait for.
 
-        A member that is configured but has not finished loading must hold the
-        aggregate back, while one whose entry was deleted or disabled must not
-        hold it back for ever: a disabled entry is never going to report.
+        A member that has not finished loading must hold the aggregate back,
+        while a disabled one must not hold it back for ever: it is never going
+        to report. A member no host answers to is waited for as well. Deleting
+        a host takes it out of its groups, so that is a rename under way, where
+        the group can reload on the new name before the host has taken it, and
+        the rules only that host has would otherwise be deleted.
         """
-        configured = {
+        disabled = {
             entry.data.get(CONF_NAME, entry.title)
             for entry in self.hass.config_entries.async_entries(DOMAIN)
-            if not is_group_entry(entry) and not entry.disabled_by
+            if not is_group_entry(entry) and entry.disabled_by
         }
-        return [member for member in self._members if member in configured]
+        return [member for member in self._members if member not in disabled]
 
     @staticmethod
     def _count_reporters(active_members: list[Any], support_flag: str) -> int:

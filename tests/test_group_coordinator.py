@@ -512,9 +512,11 @@ class TestGroupAggregationMemberFiltering:
         assert result[ATTR_QUERIES] == 100
 
     def test_skips_failed_coordinator(self):
-        coord, hass = make_group_coordinator(members=["h1", "h2"], configured=["h1"])
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
         c1 = make_member("h1", base_data(queries=100), success=True)
         c2 = make_member("h2", base_data(queries=200), success=False)
+        for _ in range(HOLD_POLLS_FOR_MISSING_MEMBER):
+            run_aggregation(coord, hass, {"e1": c1, "e2": c2})
         result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
         assert result[ATTR_QUERIES] == 100
 
@@ -636,8 +638,8 @@ class TestGroupAggregationExpiry:
         result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
         assert sorted(result[ATTR_FILTERING_RULES]) == ["block-ads", "block-porn"]
 
-    def test_a_deleted_member_does_not_freeze_the_group(self):
-        """A member whose host entry is gone must not hold the aggregate back."""
+    def test_a_member_mid_rename_does_not_delete_its_rules(self):
+        """The group can reload on the new name before the host has taken it."""
         coord, hass = make_group_coordinator(members=["h1", "h2"])
         rules_h1 = {"block-ads": {"name": "Block Ads", "matches": 4}}
         rules_h2 = {"block-porn": {"name": "Block Porn", "matches": 2}}
@@ -645,9 +647,9 @@ class TestGroupAggregationExpiry:
         c2 = make_member("h2", base_data(**{ATTR_FILTERING_RULES: rules_h2}))
         run_aggregation(coord, hass, {"e1": c1, "e2": c2})
 
-        hass.config_entries.async_entries.return_value = [make_host_entry("h1")]
+        hass.config_entries.async_entries.return_value = [make_host_entry("h1"), make_host_entry("old-h2")]
         result = run_aggregation(coord, hass, {"e1": c1})
-        assert list(result[ATTR_FILTERING_RULES]) == ["block-ads"]
+        assert sorted(result[ATTR_FILTERING_RULES]) == ["block-ads", "block-porn"]
 
     def test_a_disabled_member_does_not_freeze_the_group(self):
         """A disabled host entry is never going to report, so it cannot hold on."""
