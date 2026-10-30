@@ -89,8 +89,9 @@ class TestClearCache:
     def clear(self, coords, api, host=None):
         hass = MagicMock()
         hass.data = {DOMAIN: {f"entry-{i}": c for i, c in enumerate(coords)}}
-        asyncio.run(register_dnsdist_services(hass))
-        handler = hass.services.async_register.call_args.args[2]
+        with patch("custom_components.dnsdist.services.async_register_admin_service") as register:
+            asyncio.run(register_dnsdist_services(hass))
+        handler = register.call_args.args[3]
         call = MagicMock(data={"host": host} if host else {})
         with patch("custom_components.dnsdist.services._call_dnsdist_api", api):
             asyncio.run(handler(call))

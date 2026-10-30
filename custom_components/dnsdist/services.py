@@ -32,14 +32,24 @@ from asyncio import timeout
 from typing import Any
 from urllib.parse import urlencode
 
+import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.service import async_register_admin_service
 
 from .const import DOMAIN, SERVICE_CLEAR_CACHE
 from .utils import slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
+
+CLEAR_CACHE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("host"): cv.string,
+        vol.Optional("pool", default=""): cv.string,
+    }
+)
 
 
 async def _call_dnsdist_api(
@@ -167,7 +177,9 @@ async def register_dnsdist_services(hass: HomeAssistant):
         if failed:
             raise HomeAssistantError(f"Cache clear failed on {', '.join(failed)}")
 
-    # Register REST-only services
-    hass.services.async_register(DOMAIN, SERVICE_CLEAR_CACHE, handle_clear_cache)
+    # Admins only, as Home Assistant does with its own services that act on a
+    # server. The Clear Cache button calls it with no user attached, which the
+    # check lets through, so the button still works for whoever can press it.
+    async_register_admin_service(hass, DOMAIN, SERVICE_CLEAR_CACHE, handle_clear_cache, schema=CLEAR_CACHE_SCHEMA)
 
     _LOGGER.info("Registered dnsdist service: %s.", SERVICE_CLEAR_CACHE)
