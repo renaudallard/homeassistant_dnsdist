@@ -72,9 +72,11 @@ from .coordinator import DnsdistCoordinator
 from .group_coordinator import DnsdistGroupCoordinator
 from .services import register_dnsdist_services
 from .utils import (
+    async_drop_unknown_members,
     async_prune_orphaned_devices,
     async_prune_orphaned_entities,
     async_remove_retired_entities,
+    async_update_group_members,
     device_identifier,
     is_group_entry,
 )
@@ -90,6 +92,7 @@ FRONTEND_CARD_FILENAME = "dnsdist-card.js"
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Initial setup for the dnsdist integration."""
     hass.data.setdefault(DOMAIN, {})
+    async_drop_unknown_members(hass)
 
     # Register frontend after HA is fully started
     async def _setup_frontend(_event: Any = None) -> None:
@@ -287,7 +290,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Delete what a removed entry kept on disk, the history or the group totals."""
+    """Delete what a removed entry kept on disk, and take a host out of its groups."""
+    if not is_group_entry(entry):
+        async_update_group_members(hass, entry.data.get(CONF_NAME, entry.title), None)
+
     for key in (STORAGE_KEY_HISTORY, STORAGE_KEY_GROUP):
         store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_{key}")
         await store.async_remove()

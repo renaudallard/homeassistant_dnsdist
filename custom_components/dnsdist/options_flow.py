@@ -47,7 +47,7 @@ from .const import (
     MAX_UPDATE_INTERVAL,
     MIN_UPDATE_INTERVAL,
 )
-from .utils import is_group_entry, name_is_taken
+from .utils import async_update_group_members, is_group_entry, name_is_taken
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
                     _remove_rule_entities(self.hass, self.config_entry.entry_id)
 
                 if not is_group and new_name != name:
-                    _rename_group_members(self.hass, name, new_name)
+                    async_update_group_members(self.hass, name, new_name)
 
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
@@ -127,9 +127,11 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
             schema = vol.Schema(
                 {
                     vol.Required(CONF_NAME, default=name): str,
+                    # A name no host answers to is not one of the choices, so
+                    # it could neither be unticked nor pass validation.
                     vol.Required(
                         CONF_MEMBERS,
-                        default=members,
+                        default=[member for member in members if member in available_hosts],
                     ): cv.multi_select(sorted(available_hosts)),
                     vol.Optional(CONF_UPDATE_INTERVAL, default=update_interval): vol.All(
                         int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)
@@ -161,26 +163,6 @@ class DnsdistOptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=self.add_suggested_values_to_schema(schema, user_input),
             errors=errors,
         )
-
-
-def _rename_group_members(hass, old_name: str, new_name: str) -> None:
-    """Carry a host rename into the groups that list it.
-
-    Group membership is stored as display names, so a renamed host silently
-    falls out of every group it belonged to unless the lists follow it.
-    """
-
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        if not is_group_entry(entry):
-            continue
-
-        members = list(entry.data.get(CONF_MEMBERS, []))
-        if old_name not in members:
-            continue
-
-        renamed = [new_name if member == old_name else member for member in members]
-        _LOGGER.debug("[dnsdist] Group '%s' now points at '%s'", entry.title, new_name)
-        hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_MEMBERS: renamed})
 
 
 def _remove_rule_entities(hass, entry_id: str) -> None:

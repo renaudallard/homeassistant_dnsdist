@@ -28,8 +28,7 @@
 from unittest.mock import MagicMock
 
 from custom_components.dnsdist.const import CONF_IS_GROUP, CONF_MEMBERS, CONF_NAME
-from custom_components.dnsdist.options_flow import _rename_group_members
-from custom_components.dnsdist.utils import name_is_taken
+from custom_components.dnsdist.utils import async_drop_unknown_members, async_update_group_members, name_is_taken
 
 
 def make_entry(title, data):
@@ -46,7 +45,7 @@ def rename(entries, old_name, new_name):
     hass = MagicMock()
     hass.config_entries.async_entries.return_value = entries
     hass.config_entries.async_update_entry.side_effect = lambda entry, **kw: updates.update({entry.title: kw})
-    _rename_group_members(hass, old_name, new_name)
+    async_update_group_members(hass, old_name, new_name)
     return updates
 
 
@@ -78,6 +77,34 @@ class TestRenameGroupMembers:
         data = rename([group], "dns1", "resolver")["all"]["data"]
         assert data[CONF_NAME] == "all"
         assert data[CONF_IS_GROUP] is True
+
+
+class TestDropGroupMembers:
+    def test_a_removed_host_leaves_its_groups(self):
+        entries = [
+            make_entry("a", {CONF_IS_GROUP: True, CONF_MEMBERS: ["dns1", "dns2"]}),
+            make_entry("b", {CONF_IS_GROUP: True, CONF_MEMBERS: ["dns3"]}),
+        ]
+        updates = rename(entries, "dns1", None)
+        assert updates == {"a": {"data": {CONF_IS_GROUP: True, CONF_MEMBERS: ["dns2"]}}}
+
+    def test_a_group_that_loses_its_last_member_stays_a_group(self):
+        """An entry predating the flag is only told apart by its members."""
+        updates = rename([make_entry("old", {CONF_MEMBERS: ["dns1"]})], "dns1", None)
+        assert updates["old"]["data"] == {CONF_IS_GROUP: True, CONF_MEMBERS: []}
+
+    def test_names_no_host_answers_to_are_dropped(self):
+        updates = {}
+        hass = MagicMock()
+        hass.config_entries.async_entries.return_value = [
+            make_entry("dns1", {CONF_NAME: "dns1"}),
+            make_entry("dns2", {CONF_NAME: "dns2"}),
+            make_entry("a", {CONF_IS_GROUP: True, CONF_MEMBERS: ["dns1", "gone", "dns2"]}),
+            make_entry("b", {CONF_IS_GROUP: True, CONF_MEMBERS: ["dns2"]}),
+        ]
+        hass.config_entries.async_update_entry.side_effect = lambda entry, **kw: updates.update({entry.title: kw})
+        async_drop_unknown_members(hass)
+        assert updates == {"a": {"data": {CONF_IS_GROUP: True, CONF_MEMBERS: ["dns1", "dns2"]}}}
 
 
 class TestNameIsTaken:

@@ -143,6 +143,65 @@ def name_is_taken(hass: HomeAssistant, name: str, *, entry_id: str | None = None
     return False
 
 
+@callback
+def async_update_group_members(hass: HomeAssistant, old_name: str, new_name: str | None) -> None:
+    """Carry a host rename, or with no new name a removal, into its groups.
+
+    Group membership is stored as display names, so the lists have to follow
+    the host: a renamed host silently falls out of every group it belonged
+    to, and a deleted one stays listed for ever.
+    """
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if not is_group_entry(entry):
+            continue
+
+        members = list(entry.data.get(CONF_MEMBERS, []))
+        if old_name not in members:
+            continue
+
+        if new_name is None:
+            _LOGGER.debug("[dnsdist] Dropping '%s' from group '%s'", old_name, entry.title)
+            _async_set_members(hass, entry, [member for member in members if member != old_name])
+        else:
+            _LOGGER.debug("[dnsdist] Group '%s' now points at '%s'", entry.title, new_name)
+            _async_set_members(hass, entry, [new_name if member == old_name else member for member in members])
+
+
+@callback
+def async_drop_unknown_members(hass: HomeAssistant) -> None:
+    """Drop group members that no host entry answers to.
+
+    A host deleted before groups followed removals left its name behind. Only
+    safe while no rename is under way, so before any entry has set up.
+    """
+    entries = hass.config_entries.async_entries(DOMAIN)
+    hosts = {entry.data.get(CONF_NAME, entry.title) for entry in entries if not is_group_entry(entry)}
+
+    for entry in entries:
+        if not is_group_entry(entry):
+            continue
+
+        members = list(entry.data.get(CONF_MEMBERS, []))
+        known = [member for member in members if member in hosts]
+        if known != members:
+            _LOGGER.info(
+                "[dnsdist] Dropping %s from group '%s', no host by that name",
+                ", ".join(sorted(set(members) - set(known))),
+                entry.title,
+            )
+            _async_set_members(hass, entry, known)
+
+
+@callback
+def _async_set_members(hass: HomeAssistant, entry: ConfigEntry, members: list[str]) -> None:
+    """Store a group's member list, keeping the flag that says it is a group.
+
+    Entries predating the flag are told apart by their member list alone, so
+    without it a group that lost its last member would set up as a host.
+    """
+    hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_IS_GROUP: True, CONF_MEMBERS: members})
+
+
 def device_identifier(name: str, is_group: bool) -> str:
     """Build the device registry identifier for a host or group."""
     return f"group:{name}" if is_group else f"host:{name}"
