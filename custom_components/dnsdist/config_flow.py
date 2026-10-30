@@ -220,7 +220,6 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_add_hub(self, user_input: dict[str, Any] | None = None):
         """Add a single dnsdist host."""
-        _LOGGER.debug("async_step_add_hub called with user_input: %s", user_input)
         errors: dict[str, str] = {}
 
         # Keys expected in this step's form

@@ -290,6 +290,9 @@ custom_components/dnsdist/
 
 ## Changelog
 
+### 1.5.6
+- Stop writing the API key to the debug log when a host is added. The add host step logged everything the form returned, key included, and debug logs are what gets pasted into issues
+
 ### 1.5.5
 - Stop keeping long term statistics for dynblock sensors. A dynblock only lasts until it expires, but each one left a statistic behind that outlived its entity, so the statistics list filled up with dead entries. The sensors keep their state and history, they just no longer have a state class. A dynblock still active during the upgrade shows a "no longer has a state class" repair until it expires. Statistics left by earlier dynblocks are listed as having no state in Developer Tools, Statistics, and can be deleted from there
 
