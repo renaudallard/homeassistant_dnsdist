@@ -31,7 +31,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from custom_components.dnsdist import _async_register_frontend, _clamp_update_interval
+from custom_components.dnsdist import (
+    _async_register_frontend,
+    _async_unregister_lovelace_module,
+    _clamp_update_interval,
+)
 from custom_components.dnsdist.const import (
     DEFAULT_UPDATE_INTERVAL,
     MAX_UPDATE_INTERVAL,
@@ -85,3 +89,29 @@ class TestCardResource:
     @pytest.mark.parametrize("field", ["resource_mode", "mode"])
     def test_yaml_mode_leaves_it_to_the_user(self, field):
         assert self.registered(SimpleNamespace(**{field: "yaml"})) is False
+
+
+class TestCardResourceRemoval:
+    def remove(self, items, mode="storage"):
+        resources = MagicMock(loaded=False)
+        resources.async_load = AsyncMock()
+        resources.async_items.return_value = items
+        resources.async_delete_item = AsyncMock()
+        hass = MagicMock()
+        hass.data = {"lovelace": SimpleNamespace(resource_mode=mode, resources=resources)}
+        asyncio.run(_async_unregister_lovelace_module(hass))
+        return resources
+
+    def test_only_our_resource_goes(self):
+        resources = self.remove(
+            [
+                {"id": "a", "url": "/dnsdist_static/dnsdist-card.js?v=1.5.5"},
+                {"id": "b", "url": "/local/other-card.js"},
+            ]
+        )
+        resources.async_load.assert_awaited_once()
+        resources.async_delete_item.assert_awaited_once_with("a")
+
+    def test_yaml_mode_is_left_to_the_user(self):
+        resources = self.remove([{"id": "a", "url": "/dnsdist_static/dnsdist-card.js"}], mode="yaml")
+        resources.async_delete_item.assert_not_called()

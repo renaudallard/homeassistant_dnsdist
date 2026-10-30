@@ -133,9 +133,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         _LOGGER.warning("[dnsdist] Lovelace not available, cannot register card resource")
         return
 
-    # Called mode until 2026.2, which hacs.json still supports
-    mode = getattr(lovelace, "resource_mode", None) or getattr(lovelace, "mode", None)
-    if mode != "storage":
+    if _resource_mode(lovelace) != "storage":
         _LOGGER.info(
             "[dnsdist] Lovelace in YAML mode. Add resource manually: url: %s/%s, type: module",
             FRONTEND_URL_BASE,
@@ -144,6 +142,42 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         return
 
     await _async_register_lovelace_module(hass, lovelace)
+
+
+def _resource_mode(lovelace: Any) -> str | None:
+    """Return how Lovelace keeps its resources, called mode until 2026.2."""
+    return getattr(lovelace, "resource_mode", None) or getattr(lovelace, "mode", None)
+
+
+async def _async_loaded_resources(lovelace: Any) -> Any:
+    """Return the resource collection, loaded from disk.
+
+    ResourceStorageCollection defers loading; async_items() returns empty on an
+    unloaded collection and async_create_item() would then overwrite the
+    storage file, destroying all existing Lovelace resources.
+    """
+    resources = lovelace.resources
+    if hasattr(resources, "loaded") and not resources.loaded:
+        await resources.async_load()
+        resources.loaded = True
+    return resources
+
+
+async def _async_unregister_lovelace_module(hass: HomeAssistant) -> None:
+    """Remove the card resource, which nothing serves once the last entry is gone."""
+    lovelace = hass.data.get("lovelace")
+    if lovelace is None or _resource_mode(lovelace) != "storage":
+        return
+
+    url_base = f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}"
+    try:
+        resources = await _async_loaded_resources(lovelace)
+        for resource in list(resources.async_items()):
+            if resource.get("url", "").split("?")[0] == url_base:
+                await resources.async_delete_item(resource["id"])
+                _LOGGER.info("[dnsdist] Removed the dnsdist-card Lovelace resource")
+    except Exception as err:
+        _LOGGER.warning("[dnsdist] Could not remove the Lovelace resource %s: %s", url_base, err)
 
 
 async def _async_register_lovelace_module(hass: HomeAssistant, lovelace: Any) -> None:
@@ -160,15 +194,7 @@ async def _async_register_lovelace_module(hass: HomeAssistant, lovelace: Any) ->
         url_with_version = url_base
 
     try:
-        resources = lovelace.resources
-
-        # ResourceStorageCollection defers loading from disk; async_items()
-        # returns empty on an unloaded collection and async_create_item()
-        # would then overwrite the storage file, destroying all existing
-        # Lovelace resources.  Force-load here instead of polling.
-        if hasattr(resources, "loaded") and not resources.loaded:
-            await resources.async_load()
-            resources.loaded = True
+        resources = await _async_loaded_resources(lovelace)
 
         # Check existing resources
         for resource in resources.async_items():
@@ -294,6 +320,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete what a removed entry kept on disk, and take a host out of its groups."""
     if not is_group_entry(entry):
         async_update_group_members(hass, entry.data.get(CONF_NAME, entry.title), None)
+
+    # The removed entry is already out of the list
+    if not hass.config_entries.async_entries(DOMAIN):
+        await _async_unregister_lovelace_module(hass)
 
     for key in (STORAGE_KEY_HISTORY, STORAGE_KEY_GROUP):
         store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_{key}")
