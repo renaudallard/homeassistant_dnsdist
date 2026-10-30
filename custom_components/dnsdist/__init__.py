@@ -57,6 +57,7 @@ from .const import (
     MAX_UPDATE_INTERVAL,
     MIN_UPDATE_INTERVAL,
     SERVICE_CLEAR_CACHE,
+    STORAGE_KEY_GROUP,
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
@@ -277,16 +278,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a dnsdist entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        coordinator = hass.data[DOMAIN].pop(entry.entry_id, None)
+        if isinstance(coordinator, DnsdistGroupCoordinator):
+            await coordinator.async_save_totals()
         async_dispatcher_send(hass, SIGNAL_DNSDIST_RELOAD)
         _LOGGER.info("Unloaded dnsdist entry '%s'", entry.title)
     return unloaded
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Delete the request history kept for a removed entry."""
-    store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_{STORAGE_KEY_HISTORY}")
-    await store.async_remove()
+    """Delete what a removed entry kept on disk, the history or the group totals."""
+    for key in (STORAGE_KEY_HISTORY, STORAGE_KEY_GROUP):
+        store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_{key}")
+        await store.async_remove()
 
 
 async def async_remove_config_entry_device(hass: HomeAssistant, entry: ConfigEntry, device: DeviceEntry) -> bool:

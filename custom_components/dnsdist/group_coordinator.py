@@ -34,6 +34,7 @@ from typing import Any
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.storage import Store
 
 from .const import (
     ATTR_CACHE_HITS,
@@ -54,12 +55,37 @@ from .const import (
     ATTR_UPTIME,
     CONF_NAME,
     DOMAIN,
+    HISTORY_SAVE_INTERVAL,
     HOLD_POLLS_FOR_MISSING_MEMBER,
     SIGNAL_DNSDIST_RELOAD,
+    STORAGE_KEY_GROUP,
+    STORAGE_VERSION,
 )
 from .utils import coerce_int, is_group_entry, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
+
+# The members' TOTAL_INCREASING counters, which the group keeps its own total of
+COUNTER_KEYS = (
+    ATTR_QUERIES,
+    ATTR_RESPONSES,
+    ATTR_DROPS,
+    ATTR_RULE_DROP,
+    ATTR_DOWNSTREAM_ERRORS,
+    ATTR_CACHE_HITS,
+    ATTR_CACHE_MISSES,
+)
+
+
+def _served(last: int | None, now: int) -> int:
+    """Return what a counter grew by since it was last read.
+
+    A counter that went backwards belongs to a dnsdist that restarted, and
+    everything it reports now has been served since it came back.
+    """
+    if last is None:
+        return 0
+    return now - last if now >= last else now
 
 
 class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -90,8 +116,23 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # dropping to zero restarts the long term statistics. With the key
         # simply absent the sensor reads unknown, which the statistics skip.
         self._last_data: dict[str, Any] = {}
-        # Consecutive polls spent waiting on a member that is not loaded
+        # Consecutive polls spent holding the last reading
         self._held_polls = 0
+        # The group's own counters, None until the first aggregate. Summing the
+        # members' counters instead makes the total fall whenever one of them
+        # restarts, is missing or leaves, and a falling TOTAL_INCREASING sensor
+        # is a meter reset that adds the whole value to the statistics again.
+        # So the group counts what each member served since it was last read,
+        # and keeps that next to the readings it was worked out from.
+        self._totals: dict[str, int] | None = None
+        self._rule_totals: dict[str, int] = {}
+        self._seen: dict[str, dict[str, Any]] = {}
+        self._store: Store[dict[str, Any]] = Store(
+            hass,
+            STORAGE_VERSION,
+            f"{DOMAIN}_{entry_id}_{STORAGE_KEY_GROUP}",
+        )
+        self._store_loaded = False
         self._unsub_dispatcher = async_dispatcher_connect(hass, SIGNAL_DNSDIST_RELOAD, self._handle_reload_signal)
         _LOGGER.info("Initialized dnsdist group '%s' with members: %s", name, ", ".join(self._members))
 
@@ -110,6 +151,8 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Aggregate metrics from active member coordinators."""
+        await self._async_ensure_store_loaded()
+
         try:
             all_coords = self.hass.data.get(DOMAIN, {})
             member_states = self._member_states(all_coords)
@@ -118,7 +161,9 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for _, c in all_coords.items():
                 if not hasattr(c, "_name"):
                     continue
-                if c._name in self._members and c.last_update_success and c.data:
+                # A member with no reading yet, still on its first poll or down
+                # since it loaded, has no counters to add up.
+                if c._name in self._members and c.last_update_success and c.data and ATTR_QUERIES in c.data:
                     active_members.append(c)
 
             if not active_members:
@@ -126,34 +171,20 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     return {**self._last_data, ATTR_MEMBERS: member_states}
                 return {ATTR_MEMBERS: member_states}
 
-            # Publishing an aggregate that is missing a member would make the
-            # counters fall, and a falling TOTAL_INCREASING sensor is a meter
-            # reset as far as the statistics are concerned, which adds the whole
-            # value again. So hold the last reading while a member the user
-            # still has configured has no coordinator loaded, which only happens
-            # between its entry unloading and loading again. A member that is
-            # loaded but failing is not waited for: that can last, and it would
-            # hold the group for ever. The member states still go out either
-            # way, so the reachability sensors say what is being waited for.
+            # The first total is the members' counters summed, which is what
+            # the group published before it kept one of its own. Taken with a
+            # member missing it would start below that and read as a reset, so
+            # wait for every member the user still has configured, but not for
+            # ever: one whose setup fails never reports at all.
             expected = set(self._expected_members())
-            waiting = sorted(
-                state["name"] for state in member_states.values() if state["name"] in expected and not state["loaded"]
-            )
-            if waiting:
-                if self._should_hold(f"waiting for {', '.join(waiting)}"):
+            if self._totals is None:
+                active_names = {c._name for c in active_members}
+                waiting = sorted(expected - active_names)
+                if waiting and self._should_hold(f"waiting for {', '.join(waiting)}"):
                     return {**self._last_data, ATTR_MEMBERS: member_states}
-            else:
-                self._held_polls = 0
+            self._held_polls = 0
 
-            totals = {
-                ATTR_QUERIES: 0,
-                ATTR_RESPONSES: 0,
-                ATTR_DROPS: 0,
-                ATTR_RULE_DROP: 0,
-                ATTR_DOWNSTREAM_ERRORS: 0,
-                ATTR_CACHE_HITS: 0,
-                ATTR_CACHE_MISSES: 0,
-            }
+            readings: dict[str, tuple[Any, dict[str, int], dict[str, int] | None]] = {}
             # Each member works out its own rates over its own history, so the
             # group has none of its own to keep. Summing what they report
             # survives a member restarting, leaving or coming back, none of
@@ -174,8 +205,8 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             for c in active_members:
                 d = c.data or {}
-                for k in totals:
-                    totals[k] += int(d.get(k, 0) or 0)
+                counters = {k: coerce_int(d.get(k)) for k in COUNTER_KEYS}
+                member_rules: dict[str, int] | None = None
 
                 # A host that cannot be reached goes on publishing its last
                 # figures. Its counters can stay, they describe traffic that
@@ -202,6 +233,7 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 rules = d.get(ATTR_FILTERING_RULES)
                 if isinstance(rules, dict):
                     rules_reporters += 1
+                    member_rules = {}
                     source_name = getattr(c, "_name", "dnsdist")
                     for rule in rules.values():
                         if not isinstance(rule, dict):
@@ -226,10 +258,13 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         entry["matches"] += matches
                         entry_sources = entry.setdefault("sources", {})
                         entry_sources[source_name] = entry_sources.get(source_name, 0) + matches
+                        member_rules[agg_slug] = member_rules.get(agg_slug, 0) + matches
 
                         for key in ("id", "uuid", "action", "rule", "type", "enabled", "bypass"):
                             if key in rule and key not in entry and rule[key] is not None:
                                 entry[key] = rule[key]
+
+                readings[c._name] = (getattr(c, "_history_source", None), counters, member_rules)
 
                 # Aggregate dynamic rules (dynblocks)
                 dynamic_rules = d.get(ATTR_DYNAMIC_RULES)
@@ -264,6 +299,10 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             if key in rule and key not in entry and rule[key] is not None:
                                 entry[key] = rule[key]
 
+            totals = self._count(readings)
+            for slug, entry in aggregated_rules.items():
+                entry["matches"] = self._rule_totals[slug]
+
             avg_cpu = round(sum(cpu_values) / len(cpu_values), 2) if cpu_values else 0.0
             max_uptime = max(uptime_values) if uptime_values else 0
 
@@ -292,12 +331,14 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # freezes a figure, where letting the rules shrink deletes entities
             # and the history behind them, so this one waits for all of them.
             quorum = len(active_members) >= len(expected)
-            self._publish_aggregate(
-                aggregated,
-                ATTR_FILTERING_RULES,
-                aggregated_rules,
-                quorum and rules_reporters >= self._count_reporters(active_members, "_server_config_supported"),
+            rules_complete = quorum and rules_reporters >= self._count_reporters(
+                active_members, "_server_config_supported"
             )
+            if rules_complete:
+                # The rule is gone from every member, so a rule taking its name
+                # later on starts a total of its own.
+                self._rule_totals = {slug: n for slug, n in self._rule_totals.items() if slug in aggregated_rules}
+            self._publish_aggregate(aggregated, ATTR_FILTERING_RULES, aggregated_rules, rules_complete)
             self._publish_aggregate(
                 aggregated,
                 ATTR_DYNAMIC_RULES,
@@ -306,12 +347,122 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
             self._last_data = aggregated
+            self._store.async_delay_save(self._store_payload, HISTORY_SAVE_INTERVAL)
             _LOGGER.debug("[%s] Aggregated stats: %s", self._name, aggregated)
             return aggregated
 
         except Exception as err:
             _LOGGER.warning("[%s] Aggregation error: %s", self._name, err)
             return self._last_data
+
+    def _count(self, readings: dict[str, tuple[Any, dict[str, int], dict[str, int] | None]]) -> dict[str, int]:
+        """Move the group's own counters on by what each member served.
+
+        A member seen for the first time, or pointed at a different dnsdist
+        since, adds nothing on that reading: its counter is a lifetime the
+        group never watched go past. One that was absent for a while adds the
+        traffic it served meanwhile, which really happened. A rule keeps the
+        same kind of total, started from the members' matches summed the first
+        time the group sees it.
+        """
+        first = self._totals is None
+        if self._totals is None:
+            self._totals = {k: sum(counters[k] for _, counters, _ in readings.values()) for k in COUNTER_KEYS}
+
+        new_rules: dict[str, int] = {}
+        for _, _, rules in readings.values():
+            for slug, matches in (rules or {}).items():
+                if slug not in self._rule_totals:
+                    new_rules[slug] = new_rules.get(slug, 0) + matches
+
+        for name, (source, counters, rules) in readings.items():
+            prev = self._seen.get(name)
+            known = prev is not None and prev.get("source") == source
+            last_counters = prev["counters"] if known and prev is not None else {}
+            last_rules = prev["rules"] if known and prev is not None else {}
+
+            if not first:
+                for k in COUNTER_KEYS:
+                    self._totals[k] += _served(last_counters.get(k), counters[k])
+
+            if rules is not None:
+                for slug, matches in rules.items():
+                    if slug in self._rule_totals:
+                        self._rule_totals[slug] += _served(last_rules.get(slug), matches)
+
+            self._seen[name] = {
+                "source": source,
+                "counters": counters,
+                "rules": rules if rules is not None else last_rules,
+            }
+
+        self._rule_totals.update(new_rules)
+        for name in [n for n in self._seen if n not in self._members]:
+            del self._seen[name]
+
+        return dict(self._totals)
+
+    async def _async_ensure_store_loaded(self) -> None:
+        """Pick up the totals from before a restart or a reload, once."""
+        if self._store_loaded:
+            return
+
+        self._store_loaded = True
+        try:
+            stored = await self._store.async_load()
+        except Exception as err:
+            _LOGGER.debug("[%s] Failed to load the group totals: %s", self._name, err)
+            return
+
+        self._restore(stored)
+
+    def _restore(self, stored: Any) -> None:
+        """Take the stored totals, or nothing at all if any part is unreadable."""
+        if not isinstance(stored, dict):
+            return
+
+        totals = stored.get("totals")
+        rule_totals = stored.get("rules")
+        seen = stored.get("members")
+        if not isinstance(totals, dict) or not isinstance(rule_totals, dict) or not isinstance(seen, dict):
+            return
+        if not all(isinstance(totals.get(k), int) for k in COUNTER_KEYS):
+            return
+
+        members: dict[str, dict[str, Any]] = {}
+        for name, item in seen.items():
+            if not isinstance(item, dict):
+                continue
+            counters = item.get("counters")
+            rules = item.get("rules")
+            if not isinstance(counters, dict) or not isinstance(rules, dict):
+                continue
+            members[name] = {
+                "source": item.get("source"),
+                "counters": {k: v for k, v in counters.items() if isinstance(v, int)},
+                "rules": {k: v for k, v in rules.items() if isinstance(v, int)},
+            }
+
+        self._totals = {k: totals[k] for k in COUNTER_KEYS}
+        self._rule_totals = {k: v for k, v in rule_totals.items() if isinstance(v, int)}
+        self._seen = members
+
+    async def async_save_totals(self) -> None:
+        """Write the totals now, for the coordinator taking over after a reload.
+
+        The regular save waits a few minutes, and one that has not happened
+        yet would leave a reloaded group with no totals to carry on from.
+        """
+        if self._totals is not None:
+            await self._store.async_save(self._store_payload())
+
+    def _store_payload(self) -> dict[str, Any]:
+        """Build what the store writes, when it writes it, so it is all one moment."""
+        return {
+            "totals": self._totals,
+            "rules": self._rule_totals,
+            "members": self._seen,
+        }
 
     def _should_hold(self, reason: str) -> bool:
         """Say whether to carry the last aggregate forward one more poll.

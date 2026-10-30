@@ -26,7 +26,7 @@
 """Tests for DnsdistGroupCoordinator aggregation logic."""
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.dnsdist.group_coordinator import DnsdistGroupCoordinator
 from custom_components.dnsdist.const import (
@@ -82,6 +82,8 @@ def make_group_coordinator(members=None, configured=None):
             members=members or ["host1", "host2"],
             update_interval=30,
         )
+    coord._store_loaded = True
+    coord._store = MagicMock()
     return coord, hass
 
 
@@ -89,6 +91,7 @@ def make_member(name, data, success=True, reachable=True):
     c = MagicMock()
     c._name = name
     c._host = "10.0.0.1"
+    c._history_source = f"{name}:8083"
     c.last_update_success = success
     c.data = data
     c.reachable = reachable
@@ -221,24 +224,61 @@ class TestPartialMembership:
             "e2": make_member("h2", base_data(**{ATTR_QUERIES: q})),
         }
 
-    def test_a_member_that_never_comes_back_stops_being_waited_for(self):
-        """A member entry that fails to set up never reaches hass.data at all."""
+    def one(self, q):
+        return {"e1": make_member("h1", base_data(**{ATTR_QUERIES: q}))}
+
+    def test_a_missing_member_does_not_make_it_fall(self):
         coord, hass = self.setup_group()
         assert self.queries(coord, hass, self.both(1000)) == 2000
+        assert self.queries(coord, hass, self.one(1200)) == 2200, "the other one goes on counting"
 
-        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
-        held = [self.queries(coord, hass, only_one) for _ in range(HOLD_POLLS_FOR_MISSING_MEMBER)]
-        assert held == [2000] * HOLD_POLLS_FOR_MISSING_MEMBER, "held while it might still return"
-        assert self.queries(coord, hass, only_one) == 1200, "then reports what is actually there"
+    def test_a_member_coming_back_adds_what_it_served_meanwhile(self):
+        coord, hass = self.setup_group()
+        self.queries(coord, hass, self.both(1000))
+        self.queries(coord, hass, self.one(1200))
+        assert self.queries(coord, hass, self.both(1400)) == 2800
 
-    def test_the_hold_starts_over_after_a_full_reading(self):
+    def test_a_member_whose_dnsdist_restarted_adds_only_its_new_traffic(self):
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1_000_000)) == 2_000_000
+        restarted = {
+            "e1": make_member("h1", base_data(**{ATTR_QUERIES: 1_000_100})),
+            "e2": make_member("h2", base_data(**{ATTR_QUERIES: 50})),
+        }
+        assert self.queries(coord, hass, restarted) == 2_000_150
+
+    def test_a_member_on_its_first_poll_does_not_make_it_fall(self):
+        """Its coordinator is loaded but has no reading yet."""
         coord, hass = self.setup_group()
         assert self.queries(coord, hass, self.both(1000)) == 2000
-        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
+        pending = {**self.one(1100), "e2": make_member("h2", None)}
+        assert self.queries(coord, hass, pending) == 2100
+
+    def test_a_member_seen_for_the_first_time_adds_nothing_yet(self):
+        """Its counter is a lifetime the group never watched go past."""
+        coord, hass = self.setup_group()
         for _ in range(HOLD_POLLS_FOR_MISSING_MEMBER):
-            self.queries(coord, hass, only_one)
-        assert self.queries(coord, hass, self.both(1300)) == 2600
-        assert self.queries(coord, hass, only_one) == 2600, "the count reset with the full reading"
+            assert ATTR_QUERIES not in run_aggregation(coord, hass, self.one(1000))
+        assert self.queries(coord, hass, self.one(1000)) == 1000, "gave up waiting"
+
+        late = {**self.one(1100), "e2": make_member("h2", base_data(**{ATTR_QUERIES: 5_000_000}))}
+        assert self.queries(coord, hass, late) == 1100
+        later = {**self.one(1200), "e2": make_member("h2", base_data(**{ATTR_QUERIES: 5_000_300}))}
+        assert self.queries(coord, hass, later) == 1500
+
+    def test_a_member_pointed_at_another_dnsdist_starts_over(self):
+        coord, hass = self.setup_group()
+        assert self.queries(coord, hass, self.both(1000)) == 2000
+        moved = self.both(1100)
+        moved["e2"]._history_source = "elsewhere:8083"
+        moved["e2"].data = base_data(**{ATTR_QUERIES: 9_000_000})
+        assert self.queries(coord, hass, moved) == 2100
+
+    def test_the_first_total_waits_for_every_member(self):
+        """Started without one it would sit below what the members add up to."""
+        coord, hass = self.setup_group()
+        assert ATTR_QUERIES not in run_aggregation(coord, hass, self.one(1000))
+        assert self.queries(coord, hass, self.both(1000)) == 2000
 
     def test_a_group_left_with_no_members_stops_reporting(self):
         """Stale figures that look live are worse than saying nothing."""
@@ -247,6 +287,7 @@ class TestPartialMembership:
         for _ in range(HOLD_POLLS_FOR_MISSING_MEMBER):
             assert run_aggregation(coord, hass, {})[ATTR_QUERIES] == 2000
         assert ATTR_QUERIES not in run_aggregation(coord, hass, {})
+        assert self.queries(coord, hass, self.both(1100)) == 2200, "and picks up where it was"
 
     def test_a_loaded_but_failing_member_is_not_waited_for(self):
         """That state can last, so holding for it would freeze the group."""
@@ -256,53 +297,60 @@ class TestPartialMembership:
             "e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200})),
             "e2": make_member("h2", base_data(**{ATTR_QUERIES: 1200}), success=False),
         }
-        assert self.queries(coord, hass, mixed) == 1200
-
-    def test_a_missing_member_holds_the_last_reading(self):
-        coord, hass = self.setup_group()
-        assert self.queries(coord, hass, self.both(1000)) == 2000
-        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
-        assert self.queries(coord, hass, only_one) == 2000, "held, not halved"
-
-    def test_the_reading_resumes_once_every_member_is_back(self):
-        coord, hass = self.setup_group()
-        self.queries(coord, hass, self.both(1000))
-        self.queries(coord, hass, {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))})
-        assert self.queries(coord, hass, self.both(1400)) == 2800
+        assert self.queries(coord, hass, mixed) == 2200
 
     def test_the_counters_never_fall(self):
         coord, hass = self.setup_group()
         seen = [
             self.queries(coord, hass, self.both(1000)),
             self.queries(coord, hass, self.both(1100)),
-            self.queries(coord, hass, {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}),
+            self.queries(coord, hass, self.one(1200)),
+            self.queries(coord, hass, {"e2": make_member("h2", base_data(**{ATTR_QUERIES: 10}))}),
             self.queries(coord, hass, self.both(1300)),
         ]
         assert seen == sorted(seen), seen
 
-    def test_member_states_still_go_out_while_holding(self):
-        """The reachability sensors have to say what is being waited for."""
+    def test_member_states_still_go_out_with_a_member_missing(self):
+        """The reachability sensors have to say which one it is."""
         coord, hass = self.setup_group()
         run_aggregation(coord, hass, self.both(1000))
-        held = run_aggregation(coord, hass, {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))})
-        assert held[ATTR_MEMBERS]["h2"]["loaded"] is False
+        result = run_aggregation(coord, hass, self.one(1200))
+        assert result[ATTR_MEMBERS]["h2"]["loaded"] is False
 
-    def test_a_member_whose_entry_is_gone_does_not_hold_it_for_ever(self):
+    def test_a_member_whose_entry_is_gone_does_not_make_it_fall(self):
         coord, hass = self.setup_group()
         assert self.queries(coord, hass, self.both(1000)) == 2000
         hass.config_entries.async_entries.return_value = [make_host_entry("h1")]
-        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
-        assert self.queries(coord, hass, only_one) == 1200, "membership really changed"
+        assert self.queries(coord, hass, self.one(1200)) == 2200
 
-    def test_a_disabled_member_does_not_hold_it_either(self):
+    def test_the_totals_survive_a_restart(self):
+        """What is stored is the totals and the readings they were worked out from."""
         coord, hass = self.setup_group()
-        assert self.queries(coord, hass, self.both(1000)) == 2000
-        hass.config_entries.async_entries.return_value = [
-            make_host_entry("h1"),
-            make_host_entry("h2", disabled=True),
-        ]
-        only_one = {"e1": make_member("h1", base_data(**{ATTR_QUERIES: 1200}))}
-        assert self.queries(coord, hass, only_one) == 1200
+        self.queries(coord, hass, self.both(1000))
+        self.queries(coord, hass, self.both(1100))
+        stored = coord._store_payload()
+
+        coord, hass = self.setup_group()
+        coord._restore(stored)
+        assert self.queries(coord, hass, self.both(1500)) == 3000, "the traffic meanwhile is counted"
+
+    def test_the_totals_are_written_at_once_on_unload(self):
+        """The delayed save may not have happened before the next coordinator loads."""
+        coord, hass = self.setup_group()
+        coord._store.async_save = AsyncMock()
+        asyncio.run(coord.async_save_totals())
+        coord._store.async_save.assert_not_called()
+
+        self.queries(coord, hass, self.both(1000))
+        asyncio.run(coord.async_save_totals())
+        coord._store.async_save.assert_called_once_with(coord._store_payload())
+
+    def test_an_unreadable_store_is_ignored(self):
+        for stored in (None, [], {}, {"totals": {ATTR_QUERIES: "x"}, "rules": {}, "members": {}}):
+            coord, hass = self.setup_group()
+            coord._restore(stored)
+            assert coord._totals is None
+            assert self.queries(coord, hass, self.both(1000)) == 2000
 
 
 class TestGroupRates:
@@ -464,7 +512,7 @@ class TestGroupAggregationMemberFiltering:
         assert result[ATTR_QUERIES] == 100
 
     def test_skips_failed_coordinator(self):
-        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        coord, hass = make_group_coordinator(members=["h1", "h2"], configured=["h1"])
         c1 = make_member("h1", base_data(queries=100), success=True)
         c2 = make_member("h2", base_data(queries=200), success=False)
         result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
@@ -676,3 +724,49 @@ class TestGroupAggregationExpiry:
         # h2 is mid-reload: gone from hass.data, entry still configured
         result = run_aggregation(coord, hass, {"e1": c1})
         assert sorted(result[ATTR_FILTERING_RULES]) == ["block-ads", "block-porn"]
+
+
+class TestRuleTotals:
+    """A group rule sensor is TOTAL_INCREASING too, so its matches must not fall."""
+
+    def matches(self, coord, hass, h1, h2):
+        coords = {}
+        for i, (name, n) in enumerate((("h1", h1), ("h2", h2))):
+            if n is not None:
+                rules = {"block-ads": {"name": "Block Ads", "matches": n}}
+                coords[f"e{i}"] = make_member(name, base_data(**{ATTR_FILTERING_RULES: rules}))
+        return run_aggregation(coord, hass, coords)[ATTR_FILTERING_RULES]["block-ads"]["matches"]
+
+    def test_a_member_restarting_does_not_make_it_fall(self):
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        assert self.matches(coord, hass, 500, 500) == 1000
+        assert self.matches(coord, hass, 510, 3) == 1013
+
+    def test_a_member_missing_keeps_it_where_it_was(self):
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        assert self.matches(coord, hass, 500, 500) == 1000
+        assert self.matches(coord, hass, 510, None) == 1000, "the aggregate is not complete"
+        assert self.matches(coord, hass, 520, 530) == 1050
+
+    def test_a_rule_gone_from_every_member_starts_over(self):
+        coord, hass = make_group_coordinator(members=["h1"])
+        rules = {"block-ads": {"name": "Block Ads", "matches": 40}}
+        c1 = make_member("h1", base_data(**{ATTR_FILTERING_RULES: rules}))
+        run_aggregation(coord, hass, {"e1": c1})
+        c1.data = base_data(**{ATTR_FILTERING_RULES: {}})
+        run_aggregation(coord, hass, {"e1": c1})
+        assert "block-ads" not in coord._rule_totals
+
+        c1.data = base_data(**{ATTR_FILTERING_RULES: {"block-ads": {"name": "Block Ads", "matches": 2}}})
+        result = run_aggregation(coord, hass, {"e1": c1})
+        assert result[ATTR_FILTERING_RULES]["block-ads"]["matches"] == 2
+
+    def test_the_rule_totals_survive_a_restart(self):
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        self.matches(coord, hass, 500, 500)
+        self.matches(coord, hass, 510, 3)
+        stored = coord._store_payload()
+
+        coord, hass = make_group_coordinator(members=["h1", "h2"])
+        coord._restore(stored)
+        assert self.matches(coord, hass, 520, 13) == 1033
