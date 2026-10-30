@@ -444,6 +444,11 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             if normalized is None:
                 continue
             slug = normalized.pop("slug")
+            if slug in backends:
+                # dnsdist does not insist on unique names, and the last backend
+                # would hide the others, a down one behind one that is up. The
+                # first keeps the slug it always had, so its entity stays put.
+                slug = slugify_rule(f"{normalized['name']} {normalized['address']}")
             backends[slug] = normalized
 
         return backends

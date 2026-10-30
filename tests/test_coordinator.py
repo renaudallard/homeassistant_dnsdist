@@ -829,3 +829,22 @@ class TestNormalizeDynamicRule:
         result = self.coord._normalize_dynamic_rule("192.168.0.0/16", {"blocks": 2})
         assert "slug" in result
         assert result["slug"] != ""
+
+
+class TestBackends:
+    def parse(self, servers):
+        return make_coordinator()._parse_backends({"servers": servers})
+
+    def test_backends_sharing_a_name_each_get_one(self):
+        backends = self.parse(
+            [
+                {"name": "quad9", "address": "9.9.9.9:53", "state": "down"},
+                {"name": "quad9", "address": "149.112.112.112:53", "state": "up"},
+            ]
+        )
+        assert backends["quad9"]["address"] == "9.9.9.9:53"
+        assert backends["quad9-149-112-112-112-53"]["state"] == "up"
+
+    def test_a_unique_name_keeps_its_slug(self):
+        backends = self.parse([{"name": "Quad 9", "address": "9.9.9.9:53"}, {"address": "1.1.1.1:53"}])
+        assert sorted(backends) == ["1-1-1-1-53", "quad-9"]
