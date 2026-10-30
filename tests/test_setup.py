@@ -25,9 +25,13 @@
 
 """Tests for the entry setup helpers."""
 
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from custom_components.dnsdist import _clamp_update_interval
+from custom_components.dnsdist import _async_register_frontend, _clamp_update_interval
 from custom_components.dnsdist.const import (
     DEFAULT_UPDATE_INTERVAL,
     MAX_UPDATE_INTERVAL,
@@ -61,3 +65,23 @@ class TestClampUpdateInterval:
         """That division is what used to raise before the coordinator existed."""
         for value in (0, -5, "nope", None, 9999, 30):
             assert 86400 // _clamp_update_interval(value) > 0
+
+
+class TestCardResource:
+    """Lovelace calls the resource mode resource_mode from 2026.2, mode before."""
+
+    def registered(self, lovelace):
+        hass = MagicMock()
+        hass.http.async_register_static_paths = AsyncMock()
+        hass.data = {"lovelace": lovelace}
+        with patch("custom_components.dnsdist._async_register_lovelace_module", AsyncMock()) as register:
+            asyncio.run(_async_register_frontend(hass))
+        return register.called
+
+    @pytest.mark.parametrize("field", ["resource_mode", "mode"])
+    def test_storage_mode_registers_the_card(self, field):
+        assert self.registered(SimpleNamespace(**{field: "storage"})) is True
+
+    @pytest.mark.parametrize("field", ["resource_mode", "mode"])
+    def test_yaml_mode_leaves_it_to_the_user(self, field):
+        assert self.registered(SimpleNamespace(**{field: "yaml"})) is False
