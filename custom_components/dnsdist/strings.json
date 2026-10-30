@@ -53,7 +53,8 @@
       "invalid_host": "Invalid host format. Enter a valid hostname, IPv4, or IPv6 address."
     },
     "abort": {
-      "reconfigure_not_supported": "Reconfigure is only available for host entries, not groups."
+      "reconfigure_not_supported": "Reconfigure is only available for host entries, not groups.",
+      "reconfigure_successful": "The host was reconfigured."
     }
   },
   "options": {
