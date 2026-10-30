@@ -195,6 +195,21 @@ export class DnsdistCard extends LitElement {
     return `${days}d ${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m`;
   }
 
+  // The device the card's own metrics sit on, which every rule sensor of this
+  // host or group shares. A name only says so much: a dns card would otherwise
+  // claim the rules of dns1, and those of a host called "dns 1" too.
+  private _ownDevice(): string | undefined {
+    const metric = this._getEntityId('queries');
+    return metric ? this.hass?.entities?.[metric]?.device_id : undefined;
+  }
+
+  private _isOurs(entityId: string, friendlyName: string, device: string | undefined): boolean {
+    if (device !== undefined) return this.hass.entities?.[entityId]?.device_id === device;
+    const prefix = this._config.entity_prefix.toLowerCase();
+    return entityId.toLowerCase().startsWith(`sensor.${prefix}_`) ||
+      friendlyName.toLowerCase().startsWith(`${prefix.replace(/_/g, ' ')} `);
+  }
+
   private _getFilterEntities(): Array<{ entity: HassEntity; rule: FilteringRule }> {
     if (!this.hass?.states) return [];
 
@@ -211,6 +226,7 @@ export class DnsdistCard extends LitElement {
     );
 
     const filters: Array<{ entity: HassEntity; rule: FilteringRule }> = [];
+    const device = this._ownDevice();
 
     for (const entityId of Object.keys(this.hass.states)) {
       if (!entityId.startsWith('sensor.')) continue;
@@ -221,11 +237,8 @@ export class DnsdistCard extends LitElement {
       // Method 1: Check by entity_id pattern (handles both prefix and doubled prefix)
       const matchesPattern = filterPattern.test(entityId);
 
-      // Method 2: Check by friendly_name containing "Filter" and prefix
-      const prefixForName = prefix.toLowerCase().replace(/_/g, ' ');
-      const matchesFriendlyName = friendlyName.toLowerCase().includes(' filter ') &&
-        (friendlyName.toLowerCase().startsWith(prefixForName) ||
-         friendlyName.toLowerCase().startsWith(`${prefixForName} ${prefixForName}`));
+      // Method 2: Check by friendly_name containing "Filter"
+      const matchesFriendlyName = friendlyName.toLowerCase().includes(' filter ');
 
       // Method 3: filter attributes plus the filter marker, which catches an
       // entity renamed away from the pattern above. The attributes on their own
@@ -234,11 +247,10 @@ export class DnsdistCard extends LitElement {
         (entity.attributes?.rule !== undefined && entity.attributes?.enabled !== undefined);
       const looksLikeFilter = entityId.includes('_filter_') ||
         friendlyName.toLowerCase().includes(' filter ');
-      const matchesFilterAttrs = hasFilterAttrs && looksLikeFilter &&
-        (entityId.toLowerCase().includes(prefix.toLowerCase()) ||
-         friendlyName.toLowerCase().includes(prefix.toLowerCase().replace(/_/g, ' ')));
+      const matchesFilterAttrs = hasFilterAttrs && looksLikeFilter;
 
       if (!matchesPattern && !matchesFriendlyName && !matchesFilterAttrs) continue;
+      if (!this._isOurs(entityId, friendlyName, device)) continue;
       const matches = parseInt(entity.state, 10);
 
       const rule: FilteringRule = {
@@ -305,6 +317,7 @@ export class DnsdistCard extends LitElement {
     );
 
     const rules: Array<{ entity: HassEntity; rule: DynamicRule }> = [];
+    const device = this._ownDevice();
 
     for (const entityId of Object.keys(this.hass.states)) {
       if (!entityId.startsWith('sensor.')) continue;
@@ -316,10 +329,7 @@ export class DnsdistCard extends LitElement {
       const matchesPattern = dynblockPattern.test(entityId);
 
       // Method 2: Check by friendly_name containing "Dynblock"
-      const prefixForName = prefix.toLowerCase().replace(/_/g, ' ');
-      const matchesFriendlyName = friendlyName.toLowerCase().includes(' dynblock ') &&
-        (friendlyName.toLowerCase().startsWith(prefixForName) ||
-         friendlyName.toLowerCase().startsWith(`${prefixForName} ${prefixForName}`));
+      const matchesFriendlyName = friendlyName.toLowerCase().includes(' dynblock ');
 
       // Method 3: dynblock attributes plus the dynblock marker, on the same
       // terms as the filter list above.
@@ -327,11 +337,10 @@ export class DnsdistCard extends LitElement {
         (entity.attributes?.reason !== undefined && entity.attributes?.seconds !== undefined);
       const looksLikeDynblock = entityId.includes('_dynblock_') ||
         friendlyName.toLowerCase().includes(' dynblock ');
-      const matchesDynblockAttrs = hasDynblockAttrs && looksLikeDynblock &&
-        (entityId.toLowerCase().includes(prefix.toLowerCase()) ||
-         friendlyName.toLowerCase().includes(prefix.toLowerCase().replace(/_/g, ' ')));
+      const matchesDynblockAttrs = hasDynblockAttrs && looksLikeDynblock;
 
       if (!matchesPattern && !matchesFriendlyName && !matchesDynblockAttrs) continue;
+      if (!this._isOurs(entityId, friendlyName, device)) continue;
 
       // Skip entities with invalid/unavailable state
       if (entity.state === 'unknown' || entity.state === 'unavailable') continue;
