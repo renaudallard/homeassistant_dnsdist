@@ -428,7 +428,9 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_HOST, default=current_host): str,
                 vol.Required(CONF_PORT, default=current_port): vol.All(int, vol.Range(min=1, max=65535)),
-                vol.Optional(CONF_API_KEY, default=current_api_key): str,
+                # Suggested rather than a default, which voluptuous would put
+                # back when the field is emptied, so the key could not be removed.
+                vol.Optional(CONF_API_KEY, description={"suggested_value": current_api_key}): str,
                 vol.Optional(CONF_USE_HTTPS, default=current_use_https): bool,
                 vol.Optional(CONF_VERIFY_SSL, default=current_verify_ssl): bool,
             }
