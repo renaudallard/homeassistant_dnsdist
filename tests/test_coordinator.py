@@ -99,8 +99,10 @@ class RoutedSession:
 
     def __init__(self, stats_payload):
         self._stats = stats_payload
+        self.calls = []
 
     def get(self, url, **kwargs):
+        self.calls.append(kwargs)
         if url.endswith("/statistics"):
             return FakeResponse(200, self._stats)
         return FakeResponse(404, None)
@@ -848,3 +850,19 @@ class TestBackends:
     def test_a_unique_name_keeps_its_slug(self):
         backends = self.parse([{"name": "Quad 9", "address": "9.9.9.9:53"}, {"address": "1.1.1.1:53"}])
         assert sorted(backends) == ["1-1-1-1-53", "quad-9"]
+
+
+class TestRedirects:
+    def test_no_request_carrying_the_key_follows_a_redirect(self):
+        """aiohttp keeps X-API-Key on a redirect to another host."""
+        coord = make_coordinator()
+        coord._api_key = "secret"
+        coord._history_loaded = True
+        session = RoutedSession([{"name": "queries", "value": 1.0}])
+        with (
+            patch("custom_components.dnsdist.coordinator.async_get_clientsession", return_value=session),
+            patch.object(coord, "_async_save_history"),
+        ):
+            asyncio.run(coord._async_update_data())
+        assert len(session.calls) == 3
+        assert all(call["allow_redirects"] is False for call in session.calls)

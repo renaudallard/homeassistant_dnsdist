@@ -140,6 +140,9 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         await self._async_ensure_history_loaded()
 
         url = f"{self._base_url}/api/v1/servers/localhost/statistics"
+        # Every request carrying the key refuses redirects: aiohttp only strips
+        # the standard credential headers on one to another host, so the key
+        # would go along to wherever a proxy in front of dnsdist points.
         headers = {"X-API-Key": self._api_key} if self._api_key else {}
 
         session = async_get_clientsession(self.hass)
@@ -148,7 +151,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             ssl_context = False if not self._verify_ssl else None
             _LOGGER.debug("[%s] Requesting stats from %s (ssl=%s)", self._name, url, ssl_context)
             async with timeout(10):
-                async with session.get(url, headers=headers, ssl=ssl_context) as resp:
+                async with session.get(url, headers=headers, ssl=ssl_context, allow_redirects=False) as resp:
                     if resp.status != 200:
                         raise ConnectionError(f"HTTP {resp.status}")
                     stats = await resp.json()
@@ -356,7 +359,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             ssl_context = False if not self._verify_ssl else None
             _LOGGER.debug("[%s] Requesting server config from %s (ssl=%s)", self._name, url, ssl_context)
             async with timeout(10):
-                async with session.get(url, headers=headers, ssl=ssl_context) as resp:
+                async with session.get(url, headers=headers, ssl=ssl_context, allow_redirects=False) as resp:
                     if resp.status == 404:
                         if self._server_config_supported is not False:
                             _LOGGER.debug(
@@ -530,7 +533,7 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             ssl_context = False if not self._verify_ssl else None
             _LOGGER.debug("[%s] Requesting dynamic rules from %s", self._name, url)
             async with timeout(10):
-                async with session.get(url, headers=headers, ssl=ssl_context) as resp:
+                async with session.get(url, headers=headers, ssl=ssl_context, allow_redirects=False) as resp:
                     if resp.status == 404:
                         if self._dynamic_rules_supported is not False:
                             _LOGGER.debug(

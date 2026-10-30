@@ -68,7 +68,7 @@ async def _call_dnsdist_api(
         verify_ssl = getattr(coordinator, "_verify_ssl", True)
         ssl_context = False if not verify_ssl else None
         async with timeout(10):
-            async with session.request(method, url, headers=headers, ssl=ssl_context) as resp:
+            async with session.request(method, url, headers=headers, ssl=ssl_context, allow_redirects=False) as resp:
                 text = await resp.text()
                 if resp.status in (200, 204):
                     _LOGGER.info("[%s] %s %s OK", getattr(coordinator, "_name", "?"), method, endpoint)
