@@ -115,7 +115,11 @@ export class DnsdistCardEditor extends LitElement {
       /^sensor\.(.+?)_dynblock_/,  // Dynamic rule sensors
     ];
 
+    // Only what dnsdist created, where the registry can say: plenty of other
+    // integrations have an uptime or a responses sensor of their own.
+    const entities = this.hass.entities;
     for (const entityId of Object.keys(this.hass.states)) {
+      if (entities && entities[entityId]?.platform !== 'dnsdist') continue;
       for (const pattern of patterns) {
         const match = entityId.match(pattern);
         if (match) {

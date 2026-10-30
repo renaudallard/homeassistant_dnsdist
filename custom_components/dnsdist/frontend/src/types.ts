@@ -14,7 +14,7 @@ export interface DnsdistCardConfig {
 
 export interface HomeAssistant {
   states: Record<string, HassEntity>;
-  entities?: Record<string, { device_id?: string }>;
+  entities?: Record<string, { device_id?: string; platform?: string }>;
   callService: (
     domain: string,
     service: string,
