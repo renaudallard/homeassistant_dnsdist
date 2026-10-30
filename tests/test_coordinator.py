@@ -877,3 +877,25 @@ class TestDynblockSlugs:
     def test_ipv4_and_suffixes_keep_their_slugs(self):
         _, rules = fetch_dynamic({"10.0.0.1/32": {"blocks": 1}, "example.com.": {"blocks": 1}})
         assert sorted(rules) == ["10-0-0-1-32", "example-com"]
+
+
+class TestRuleSlugs:
+    def parse(self, rules):
+        return make_coordinator()._parse_filtering_rules({"rules": rules})
+
+    def test_different_names_that_slug_alike_stay_apart(self):
+        rules = self.parse([{"name": "правило 1", "matches": 3}, {"name": "блок 1", "matches": 4}])
+        assert rules["1"]["name"] == "правило 1"
+        assert rules["1"]["matches"] == 3
+        others = [slug for slug in rules if slug != "1"]
+        assert len(others) == 1 and rules[others[0]]["matches"] == 4
+
+    def test_the_same_name_twice_is_still_counted_together(self):
+        rules = self.parse([{"name": "Block", "matches": 3}, {"name": "Block", "matches": 4}])
+        assert rules == {"block": {**rules["block"], "matches": 7}}
+
+    def test_a_suffixed_name_twice_is_counted_together(self):
+        rules = self.parse(
+            [{"name": "a 1", "matches": 1}, {"name": "a-1", "matches": 2}, {"name": "a-1", "matches": 5}]
+        )
+        assert sorted(r["matches"] for r in rules.values()) == [1, 7]

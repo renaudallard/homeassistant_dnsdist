@@ -66,7 +66,7 @@ from .const import (
     STORAGE_KEY_HISTORY,
     STORAGE_VERSION,
 )
-from .utils import HistoryMixin, coerce_int, make_zero_data, slugify_rule
+from .utils import HistoryMixin, coerce_int, make_zero_data, name_digest, slugify_rule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -435,6 +435,12 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
                 continue
             slug = normalized.pop("slug")
             existing = rules.get(slug)
+            if existing is not None and existing["name"] != normalized["name"]:
+                # Different names can slug alike, "правило 1" and "блок 1" both
+                # come out as 1, and adding those up would merge two unrelated
+                # rules. The first keeps the slug it always had.
+                slug = f"{slug}-{name_digest(normalized['name'])}"
+                existing = rules.get(slug)
             if existing is None:
                 rules[slug] = normalized
                 continue

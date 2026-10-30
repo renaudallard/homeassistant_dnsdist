@@ -90,9 +90,13 @@ def slugify_rule(value: Any) -> str:
     base = str(value or "").lower()
     base = SLUG_PATTERN.sub("-", base).strip("-")
     if not base:
-        digest = hashlib.blake2s(str(value).encode("utf-8"), digest_size=4).hexdigest()
-        base = f"rule-{digest}"
+        base = f"rule-{name_digest(value)}"
     return base
+
+
+def name_digest(value: Any) -> str:
+    """Return a short digest of a name that stays the same across restarts."""
+    return hashlib.blake2s(str(value).encode("utf-8"), digest_size=4).hexdigest()
 
 
 def coerce_int(value: Any) -> int:

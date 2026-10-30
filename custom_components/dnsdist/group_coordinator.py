@@ -235,7 +235,9 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     rules_reporters += 1
                     member_rules = {}
                     source_name = getattr(c, "_name", "dnsdist")
-                    for rule in rules.values():
+                    # The member's own slug, which keeps rules that only
+                    # slug alike apart
+                    for agg_slug, rule in rules.items():
                         if not isinstance(rule, dict):
                             continue
 
@@ -243,7 +245,6 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         if not base_name:
                             base_name = "Unnamed Rule"
 
-                        agg_slug = slugify_rule(base_name)
                         matches = coerce_int(rule.get("matches"))
 
                         entry = aggregated_rules.setdefault(
