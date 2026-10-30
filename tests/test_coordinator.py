@@ -334,6 +334,32 @@ class TestHistoryAndRates:
         assert totals == sorted(totals)
         assert all(rate >= 0 for rate in coord._compute_rates(90.0))
 
+    def restart_unseen(self, uptime):
+        """dnsdist was last read at 1000 queries ten minutes ago, and now shows 1500."""
+        coord = make_coordinator()
+        coord._history.append((time.time() - 600, 0))
+        coord._last_raw = 1000
+        poll(coord, [{"name": "queries", "value": 1500.0}, {"name": "uptime", "value": float(uptime)}])
+        return coord._history[-1][1]
+
+    def test_a_restart_the_counter_hides_is_told_by_the_uptime(self):
+        """It restarted five minutes ago and has served 1500 since, more than it showed before."""
+        assert self.restart_unseen(uptime=300) == 1500
+
+    def test_an_older_dnsdist_only_adds_what_it_served_since(self):
+        assert self.restart_unseen(uptime=86400) == 500
+
+    def test_a_restart_rebases_the_cpu_instead_of_spiking(self):
+        coord = make_coordinator()
+        poll(coord, [{"name": "queries", "value": 1.0}, {"name": "cpu-user-msec", "value": 1000.0}])
+        coord._history[-1] = (time.time() - 600, coord._history[-1][1])
+        stats = [
+            {"name": "queries", "value": 2.0},
+            {"name": "uptime", "value": 300.0},
+            {"name": "cpu-user-msec", "value": 900_000.0},
+        ]
+        assert ATTR_CPU not in poll(coord, stats, elapsed=600)
+
     def test_samples_older_than_a_day_are_trimmed(self):
         coord = self.feed(make_coordinator(), [(0.0, 0), (100.0, 10)])
         coord._update_history(86400.0 + 200.0, 20)

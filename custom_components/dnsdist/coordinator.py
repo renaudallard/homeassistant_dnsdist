@@ -230,6 +230,16 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
         if previous_backends is not None and ATTR_BACKENDS not in normalized:
             normalized[ATTR_BACKENDS] = previous_backends
 
+        # A dnsdist younger than the gap since the last reading restarted in
+        # between. The counters alone cannot tell that from traffic once it has
+        # served more than they showed before, while it was unreachable or
+        # Home Assistant was down.
+        now_ts = time.time()
+        uptime = normalized.get(ATTR_UPTIME, 0)
+        restarted = bool(self._history) and 0 < uptime < now_ts - self._history[-1][0]
+        if restarted:
+            self._last_cpu_msec = None
+
         # --- Compute CPU % from the user and system time counters ---
         # dnsdist runs a thread per core, so the result is not capped at 100:
         # a busy proxy on four cores legitimately reports up to 400.
@@ -253,9 +263,8 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
 
         # --- Compute rolling-window request rates ---
         try:
-            now_ts = time.time()
             q = int(normalized.get(ATTR_QUERIES, 0))
-            self._update_history(now_ts, q)
+            self._update_history(now_ts, q, restarted)
             req_hour, req_day = self._compute_rates(now_ts)
             normalized[ATTR_REQ_PER_HOUR] = req_hour
             normalized[ATTR_REQ_PER_DAY] = req_day

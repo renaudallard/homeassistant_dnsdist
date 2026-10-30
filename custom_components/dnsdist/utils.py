@@ -625,7 +625,7 @@ class HistoryMixin:
         self._last_history_persist = monotonic()
         self._history_store.async_delay_save(self._history_payload)
 
-    def _update_history(self, now_ts: float, query_count: int) -> None:
+    def _update_history(self, now_ts: float, query_count: int, restarted: bool = False) -> None:
         """Add a sample to the rolling history and trim it to 24 hours.
 
         What goes in is a running total of the traffic we have watched go past,
@@ -636,11 +636,11 @@ class HistoryMixin:
         if self._last_raw is None:
             # Nothing to measure this against, so it brings no traffic of its own.
             delta = 0
-        elif query_count >= self._last_raw:
+        elif query_count >= self._last_raw and not restarted:
             delta = query_count - self._last_raw
         else:
-            # The counter went backwards, so dnsdist restarted and everything it
-            # reports now has been served since it came back.
+            # The counter went backwards, or dnsdist says it came up since the
+            # last reading, so everything it reports now was served since then.
             delta = query_count
 
         self._last_raw = query_count
