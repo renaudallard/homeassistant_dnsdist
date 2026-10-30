@@ -420,10 +420,9 @@ class DnsdistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     new_data[CONF_API_KEY] = api_key
                     new_data[CONF_USE_HTTPS] = use_https
                     new_data[CONF_VERIFY_SSL] = verify_ssl
-                    return self.async_update_reload_and_abort(
-                        entry,
-                        data=new_data,
-                    )
+                    # The update listener reloads the entry, so this must not
+                    # schedule a second reload of its own.
+                    return self.async_update_and_abort(entry, data=new_data)
 
         schema = vol.Schema(
             {
