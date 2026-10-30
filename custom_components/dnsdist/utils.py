@@ -51,7 +51,6 @@ from .const import (
     ATTR_CACHE_HITS,
     ATTR_CACHE_HITRATE,
     ATTR_CACHE_MISSES,
-    ATTR_CPU,
     ATTR_DOWNSTREAM_ERRORS,
     ATTR_DROPS,
     ATTR_FILTERING_RULES,
@@ -447,7 +446,11 @@ def async_register_slug_platform(
 
 
 def make_zero_data() -> dict[str, Any]:
-    """Create a zeroed data dictionary for coordinators."""
+    """Create a zeroed data dictionary for coordinators.
+
+    CPU is not in it: it takes two readings to work out, and a zero before
+    then is a figure dnsdist never reported.
+    """
     return {
         ATTR_QUERIES: 0,
         ATTR_RESPONSES: 0,
@@ -457,7 +460,6 @@ def make_zero_data() -> dict[str, Any]:
         ATTR_CACHE_HITS: 0,
         ATTR_CACHE_MISSES: 0,
         ATTR_CACHE_HITRATE: 0.0,
-        ATTR_CPU: 0.0,
         ATTR_UPTIME: 0,
         ATTR_SECURITY_STATUS: "unknown",
         ATTR_REQ_PER_HOUR: 0,

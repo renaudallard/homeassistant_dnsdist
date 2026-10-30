@@ -303,7 +303,6 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for slug, entry in aggregated_rules.items():
                 entry["matches"] = self._rule_totals[slug]
 
-            avg_cpu = round(sum(cpu_values) / len(cpu_values), 2) if cpu_values else 0.0
             max_uptime = max(uptime_values) if uptime_values else 0
 
             priority = {"critical": 3, "warning": 2, "ok": 1, "secure": 1, "unknown": 0}
@@ -318,11 +317,13 @@ class DnsdistGroupCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 if (totals[ATTR_CACHE_HITS] + totals[ATTR_CACHE_MISSES]) > 0
                 else 0.0,
-                ATTR_CPU: avg_cpu,
                 ATTR_UPTIME: max_uptime,
                 ATTR_SECURITY_STATUS: sec_status,
                 ATTR_MEMBERS: member_states,
             }
+            # Left out until a member has worked one out, as a host does
+            if cpu_values:
+                aggregated[ATTR_CPU] = round(sum(cpu_values) / len(cpu_values), 2)
 
             # The rule aggregate keeps its own, stricter gate. Every member has
             # a coordinator loaded by now, but one of them may still have failed

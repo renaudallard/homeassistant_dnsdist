@@ -418,13 +418,13 @@ class TestGroupAggregationCPU:
         result = run_aggregation(coord, hass, {"e1": c1, "e2": c2})
         assert result[ATTR_CPU] == 30.0
 
-    def test_cpu_zero_when_no_members_report_cpu(self):
+    def test_cpu_left_out_when_no_members_report_cpu(self):
         coord, hass = make_group_coordinator(members=["h1"])
         # cpu key absent from data
         c1 = make_member("h1", base_data())
         del c1.data[ATTR_CPU]
         result = run_aggregation(coord, hass, {"e1": c1})
-        assert result[ATTR_CPU] == 0.0
+        assert ATTR_CPU not in result
 
     def test_skips_invalid_cpu_values(self):
         coord, hass = make_group_coordinator(members=["h1", "h2"])

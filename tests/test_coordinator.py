@@ -256,7 +256,8 @@ class TestCpuUsage:
         ]
 
     def test_the_first_poll_has_no_delta_to_report(self):
-        assert poll(make_coordinator(), self.stats(500_000))[ATTR_CPU] == 0.0
+        """A zero would be a figure dnsdist never reported."""
+        assert ATTR_CPU not in poll(make_coordinator(), self.stats(500_000))
 
     def test_counts_user_and_system_time(self):
         coord = make_coordinator()
@@ -272,7 +273,7 @@ class TestCpuUsage:
     def test_a_dnsdist_restart_reports_no_percentage_rather_than_a_negative(self):
         coord = make_coordinator()
         poll(coord, self.stats(500_000))
-        assert poll(coord, self.stats(100), elapsed=30)[ATTR_CPU] == 0.0
+        assert ATTR_CPU not in poll(coord, self.stats(100), elapsed=30)
 
     def test_a_reading_without_the_counters_does_not_spike_the_next_one(self):
         coord = make_coordinator()
