@@ -292,6 +292,7 @@ custom_components/dnsdist/
 
 ### 1.5.6
 - Report nothing rather than zero when a host cannot be reached on its first poll. After a Home Assistant restart, or an entry reload, there is no last reading to carry forward, so a host that was down published zeros. A counter falling to zero reads as a meter reset, and once the host answered again the long term statistics counted its whole lifetime a second time. The counters now read unknown until the first answer, which the statistics skip
+- Treat a response that is not the dnsdist statistics list as no answer. A JSON body from something else on the port, a proxy error for instance, was read as a dnsdist with every counter at zero, which reset the long term statistics and made the next real reading count the whole lifetime of traffic as one poll, so the request rates read in the hundreds of millions for a day
 - Stop writing the API key to the debug log when a host is added. The add host step logged everything the form returned, key included, and debug logs are what gets pasted into issues
 
 ### 1.5.5

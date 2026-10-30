@@ -70,6 +70,14 @@ from .utils import HistoryMixin, coerce_int, make_zero_data, slugify_rule
 _LOGGER = logging.getLogger(__name__)
 
 
+def _is_statistics(stats: Any) -> bool:
+    """Say whether a payload is dnsdist's statistics, which always has queries."""
+    items = stats.get("statistics") if isinstance(stats, dict) else stats
+    if not isinstance(items, list):
+        return False
+    return any(isinstance(item, dict) and item.get("name") == "queries" for item in items)
+
+
 class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator that polls a single dnsdist host."""
 
@@ -155,6 +163,14 @@ class DnsdistCoordinator(HistoryMixin, DataUpdateCoordinator[dict[str, Any]]):
             return self._unread()
         except Exception as err:
             _LOGGER.warning("[%s] Fetch error: %s", self._name, err)
+            return self._unread()
+
+        # Something else answering on the port, a proxy error page in JSON for
+        # instance, would otherwise read as a dnsdist whose counters are all
+        # zero, and the history would then take the next real reading as the
+        # whole lifetime of traffic arriving in one poll.
+        if not _is_statistics(stats):
+            _LOGGER.warning("[%s] Response is not the dnsdist statistics list", self._name)
             return self._unread()
 
         self._reachable = True

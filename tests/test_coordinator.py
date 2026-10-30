@@ -230,6 +230,20 @@ class TestUnanswered:
         poll(coord, [{"name": "queries", "value": 500.0}])
         assert poll_dead(coord)[ATTR_QUERIES] == 500
 
+    def test_a_payload_that_is_not_statistics_is_no_answer(self):
+        coord = make_coordinator()
+        poll(coord, [{"name": "queries", "value": 500.0}])
+        for payload in ({"error": "x"}, None, [], [{"name": "uptime", "value": 5.0}]):
+            assert poll(coord, payload)[ATTR_QUERIES] == 500
+            assert coord.reachable is False
+            assert coord._last_raw == 500
+
+    def test_the_dict_form_is_still_read(self):
+        coord = make_coordinator()
+        poll(coord, {"statistics": [{"name": "queries", "value": 42.0}]})
+        assert coord.data[ATTR_QUERIES] == 42
+        assert coord.reachable is True
+
 
 class TestCpuUsage:
     def stats(self, cpu_user, cpu_sys=0):
