@@ -55,6 +55,19 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Build the zip
+        if: steps.tag_check.outputs.exists == 'false'
+        run: |
+          mkdir -p dist
+          # The files of the integration at the root of the zip: hacs.json
+          # names it, and HACS and the Marketplace extract it into
+          # custom_components/dnsdist/
+          cd custom_components/dnsdist
+          zip -qr ../../dist/dnsdist.zip . \
+            -x '*.pyc' '__pycache__/*' '*/__pycache__/*'
+          cd ../..
+          unzip -l dist/dnsdist.zip
+
       - name: Create release
         if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v3
@@ -64,3 +77,4 @@ jobs:
           body_path: README.md
           draft: false
           prerelease: false
+          files: dist/dnsdist.zip
